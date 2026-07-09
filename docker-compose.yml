@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  stoud:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./stoud_data.json:/app/stoud_data.json
+    restart: unless-stopped
