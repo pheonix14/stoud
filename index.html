@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Robust SEO Tags -->
+    <title>Stoud Studio</title>
+    <meta name="description" content="Stoud - The Ultimate Open Source Live Broadcasting Studio Alternative to Restream." />
+    <meta name="keywords" content="stoud, live stream, restream alternative, headless streaming, ffmpeg, twitch, youtube, broadcast" />
+    <meta name="author" content="pheonix14">
+    
+    <!-- Open Graph for Social Sharing -->
+    <meta property="og:title" content="Stoud - Pro Streaming & Restream Alternative">
+    <meta property="og:description" content="Stream 24/7 to YouTube and Twitch directly from Google Drive or YouTube links. Completely free and open source.">
+    <meta property="og:type" content="website">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500;700&family=Roboto+Mono:wght@400;700&family=Bebas+Neue&family=Oswald:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@400;700&family=Dancing+Script:wght@400;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.process = { env: { NODE_ENV: 'production' } };
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
