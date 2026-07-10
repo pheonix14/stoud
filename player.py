@@ -18,7 +18,15 @@ active_stream_info = {
     "url": None,
     "start_time": None,
     "pid": None,
-    "quality": None
+    "quality": None,
+    "metrics": {
+        "bitrate": "N/A",
+        "speed": "N/A",
+        "fps": "N/A",
+        "frame": "0",
+        "time": "00:00:00"
+    },
+    "health": "Unknown"
 }
 
 FFMPEG_STATUS = "Not Checked"
@@ -29,13 +37,13 @@ def get_ffmpeg_status():
     if download_progress_message:
         return download_progress_message
         
-    local_ffmpeg = os.path.join(os.getcwd(), "ffmpeg.exe")
-    local_ffprobe = os.path.join(os.getcwd(), "ffprobe.exe")
-    
-    if os.path.exists(local_ffmpeg) and os.path.exists(local_ffprobe):
-        FFMPEG_STATUS = "Installed Locally"
-        return "Installed Locally"
-        
+    if sys.platform == "win32":
+        local_ffmpeg = os.path.join(os.getcwd(), "ffmpeg.exe")
+        local_ffprobe = os.path.join(os.getcwd(), "ffprobe.exe")
+        if os.path.exists(local_ffmpeg) and os.path.exists(local_ffprobe):
+            FFMPEG_STATUS = "Installed Locally"
+            return "Installed Locally"
+            
     # Check if ffmpeg is in path
     try:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -50,6 +58,10 @@ def get_ffmpeg_status():
 def download_ffmpeg_background():
     global download_progress_message
     
+    if sys.platform != "win32":
+        download_progress_message = "Platform is not Windows. FFmpeg should be installed via package manager."
+        return
+        
     def update_progress(msg):
         global download_progress_message
         download_progress_message = msg
@@ -61,7 +73,6 @@ def download_ffmpeg_background():
             update_progress("Starting download of FFmpeg release archive...")
             zip_url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
             
-            # Temporary zip path in current workspace
             temp_zip = os.path.join(os.getcwd(), "ffmpeg_temp.zip")
             
             req = urllib.request.Request(zip_url, headers={"User-Agent": "Mozilla/5.0"})
@@ -71,7 +82,7 @@ def download_ffmpeg_background():
                 
                 with open(temp_zip, "wb") as f:
                     while True:
-                        chunk = resp.read(1024 * 1024)  # 1MB chunk
+                        chunk = resp.read(1024 * 1024)
                         if not chunk:
                             break
                         f.write(chunk)
@@ -100,7 +111,6 @@ def download_ffmpeg_background():
                             target.write(source.read())
                         extracted_ffprobe = True
                         
-            # Clean up zip
             try:
                 os.remove(temp_zip)
             except Exception:
@@ -121,9 +131,10 @@ def download_ffmpeg_background():
     threading.Thread(target=worker, daemon=True).start()
 
 def get_ffmpeg_executable():
-    local_ffmpeg = os.path.join(os.getcwd(), "ffmpeg.exe")
-    if os.path.exists(local_ffmpeg):
-        return local_ffmpeg
+    if sys.platform == "win32":
+        local_ffmpeg = os.path.join(os.getcwd(), "ffmpeg.exe")
+        if os.path.exists(local_ffmpeg):
+            return local_ffmpeg
     return "ffmpeg"
 
 def add_log(message):
@@ -136,7 +147,6 @@ def add_log(message):
 def resolve_youtube_url(url):
     import yt_dlp
     add_log(f"Resolving YouTube URL: {url}")
-    # Force H264 video and AAC audio formats if possible to allow direct copy without transcoding
     ydl_opts = {
         'format': 'bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]/best',
         'quiet': True,
@@ -150,17 +160,15 @@ def resolve_youtube_url(url):
             raise Exception(f"yt-dlp extraction failed: {str(e)}")
             
         title = info.get('title', 'YouTube Video')
-        
-        # Check for separated formats
         requested_formats = info.get('requested_formats')
         if requested_formats and len(requested_formats) >= 2:
             video_url = requested_formats[0].get('url')
             audio_url = requested_formats[1].get('url')
-            add_log(f"Resolved YouTube video. Format: Multi-stream (Separate Video/Audio).")
+            add_log("Resolved YouTube video. Format: Multi-stream.")
             return video_url, audio_url, title, False
         else:
             video_url = info.get('url')
-            add_log(f"Resolved YouTube video. Format: Single-stream (Combined Video/Audio).")
+            add_log("Resolved YouTube video. Format: Single-stream.")
             return video_url, None, title, True
 
 def resolve_gdrive_url(url):
@@ -210,21 +218,38 @@ def resolve_gdrive_url(url):
         
     return direct_url, cookie_str, f"GDrive Video ({file_id})"
 
+# Regex to parse FFmpeg terminal outputs in real-time
+stats_regex = re.compile(
+    r'frame=\s*(?P<frame>\d+)\s+fps=\s*(?P<fps>[\d\.]+)\s+q=.*size=\s*(?P<size>\d+\w*)\s+time=\s*(?P<time>[\d\:\.]+)\s+bitrate=\s*(?P<bitrate>[\d\.]+kbits/s|N/A)\s+speed=\s*(?P<speed>[\d\.]+x)'
+)
+
 def log_reader_thread(process):
     global active_stream_info, active_process
     try:
-        # ffmpeg outputs logs to stderr
         while True:
             line = process.stderr.readline()
             if not line:
                 break
             line_str = line.decode('utf-8', errors='ignore').strip()
             if line_str:
+                # Add to text logs
                 add_log(f"[FFmpeg] {line_str}")
+                
+                # Parse metrics in real-time
+                match = stats_regex.search(line_str)
+                if match:
+                    gd = match.groupdict()
+                    active_stream_info["metrics"] = {
+                        "bitrate": gd.get("bitrate", "N/A"),
+                        "speed": gd.get("speed", "N/A"),
+                        "fps": gd.get("fps", "N/A"),
+                        "frame": gd.get("frame", "0"),
+                        "time": gd.get("time", "00:00:00")
+                    }
+                    active_stream_info["health"] = "Active"
     except Exception as e:
         add_log(f"Error reading FFmpeg log: {str(e)}")
     finally:
-        # Subprocess finished
         rc = process.wait()
         add_log(f"FFmpeg process exited with code {rc}")
         if active_process and active_process.pid == process.pid:
@@ -235,8 +260,16 @@ def log_reader_thread(process):
             active_stream_info["start_time"] = None
             active_stream_info["pid"] = None
             active_stream_info["quality"] = None
+            active_stream_info["health"] = "Disconnected"
+            active_stream_info["metrics"] = {
+                "bitrate": "N/A",
+                "speed": "N/A",
+                "fps": "N/A",
+                "frame": "0",
+                "time": "00:00:00"
+            }
 
-def start_stream(video_url, rtmp_url, stream_key, quality="copy"):
+def start_stream(video_url, destinations, quality="copy"):
     global active_process, active_thread, active_stream_info
     
     if active_process is not None:
@@ -244,10 +277,12 @@ def start_stream(video_url, rtmp_url, stream_key, quality="copy"):
         
     ffmpeg_exe = get_ffmpeg_executable()
     if get_ffmpeg_status() == "Not Installed":
-        raise Exception("FFmpeg is not installed. Download it in Settings first.")
+        raise Exception("FFmpeg is not installed.")
         
-    full_rtmp_url = f"{rtmp_url.rstrip('/')}/{stream_key}"
-    
+    enabled_dests = [d for d in destinations if d.get("enabled")]
+    if not enabled_dests:
+        raise Exception("No active stream destinations configured/enabled.")
+        
     # Resolve the inputs
     is_youtube = "youtube.com" in video_url or "youtu.be" in video_url
     is_gdrive = "drive.google.com" in video_url
@@ -264,7 +299,6 @@ def start_stream(video_url, rtmp_url, stream_key, quality="copy"):
         elif is_gdrive:
             video_input, cookie_str, title = resolve_gdrive_url(video_url)
         else:
-            # Direct link fallback
             video_input = video_url
             title = "Direct Video Stream"
             add_log(f"Streaming direct video link: {video_url}")
@@ -275,62 +309,56 @@ def start_stream(video_url, rtmp_url, stream_key, quality="copy"):
     # Build FFmpeg command
     cmd = [ffmpeg_exe]
     
-    # Global/Input parameters
-    # Set headers/cookies for GDrive if available
     if cookie_str:
         cmd.extend(["-headers", f"Cookie: {cookie_str}\r\n"])
         
-    # Standard input parameters: -re tells FFmpeg to read input in real-time speed (crucial for live streaming!)
     cmd.extend(["-re"])
     
-    # Add input(s)
+    # Add input
     cmd.extend(["-i", video_input])
     if audio_input:
         cmd.extend(["-re", "-i", audio_input])
         
-    # Add mapping & coding logic based on quality setting
-    if quality == "copy":
-        if audio_input:
-            cmd.extend([
-                "-map", "0:v:0",
-                "-map", "1:a:0",
-                "-c:v", "copy",
-                "-c:a", "aac",  # Transcode audio to AAC if it's not already, since RTMP requires AAC
-                "-strict", "experimental"
-            ])
-        else:
-            cmd.extend([
-                "-c:v", "copy",
-                "-c:a", "aac",  # Copy video codec, transcode audio to standard AAC
-                "-strict", "experimental"
-            ])
-    else:
-        # Transcoding options (720p H264 medium quality)
-        add_log("Transcoding stream to H.264/AAC...")
-        if audio_input:
-            cmd.extend(["-map", "0:v:0", "-map", "1:a:0"])
-            
-        cmd.extend([
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-b:v", "2500k",
-            "-maxrate", "2500k",
-            "-bufsize", "5000k",
-            "-pix_fmt", "yuv420p",
-            "-g", "60",         # Keyframe interval of 2 seconds for standard streaming
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-ar", "44100"
-        ])
+    # For multiple outputs, we specify mapping and output parameters for EACH destination
+    for dest in enabled_dests:
+        full_rtmp_url = f"{dest['rtmp_url'].rstrip('/')}/{dest['stream_key']}"
         
-    # Output parameters
-    cmd.extend([
-        "-f", "flv",
-        full_rtmp_url
-    ])
+        if quality == "copy":
+            if audio_input:
+                cmd.extend([
+                    "-map", "0:v:0",
+                    "-map", "1:a:0",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-strict", "experimental",
+                    "-f", "flv", full_rtmp_url
+                ])
+            else:
+                cmd.extend([
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-strict", "experimental",
+                    "-f", "flv", full_rtmp_url
+                ])
+        else:
+            if audio_input:
+                cmd.extend(["-map", "0:v:0", "-map", "1:a:0"])
+            cmd.extend([
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-b:v", "2500k",
+                "-maxrate", "2500k",
+                "-bufsize", "5000k",
+                "-pix_fmt", "yuv420p",
+                "-g", "60",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-ar", "44100",
+                "-f", "flv", full_rtmp_url
+            ])
+            
+    add_log(f"Launching FFmpeg streaming subprocess to {len(enabled_dests)} platforms...")
     
-    add_log(f"Launching FFmpeg streaming subprocess...")
-    # Hide window on Windows to avoid annoying popups
     startupinfo = None
     if sys.platform == "win32":
         startupinfo = subprocess.STARTUPINFO()
@@ -353,12 +381,19 @@ def start_stream(video_url, rtmp_url, stream_key, quality="copy"):
         "url": video_url,
         "start_time": time.time(),
         "pid": active_process.pid,
-        "quality": quality
+        "quality": quality,
+        "metrics": {
+            "bitrate": "N/A",
+            "speed": "N/A",
+            "fps": "N/A",
+            "frame": "0",
+            "time": "00:00:00"
+        },
+        "health": "Active"
     }
     
-    add_log(f"Stream started! PID: {active_process.pid}. Streaming '{title}' to target RTMP.")
+    add_log(f"Stream started! PID: {active_process.pid}. Broadcasting to platforms.")
     
-    # Start reader thread to grab stderr logs
     active_thread = threading.Thread(target=log_reader_thread, args=(active_process,), daemon=True)
     active_thread.start()
     
@@ -373,13 +408,11 @@ def stop_stream():
     add_log(f"Stopping active stream (PID: {active_process.pid})...")
     try:
         active_process.terminate()
-        # Wait a moment for it to terminate
         for _ in range(10):
             if active_process.poll() is not None:
                 break
             time.sleep(0.2)
         else:
-            # Force kill if it's still alive
             active_process.kill()
             active_process.wait()
     except Exception as e:
@@ -392,6 +425,14 @@ def stop_stream():
     active_stream_info["start_time"] = None
     active_stream_info["pid"] = None
     active_stream_info["quality"] = None
+    active_stream_info["health"] = "Disconnected"
+    active_stream_info["metrics"] = {
+        "bitrate": "N/A",
+        "speed": "N/A",
+        "fps": "N/A",
+        "frame": "0",
+        "time": "00:00:00"
+    }
     
     add_log("Stream stopped successfully.")
     return True

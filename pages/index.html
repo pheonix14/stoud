@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stoud v3 - Live Streaming Cockpit</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <div class="bg-glow-secondary"></div>
+
+    <!-- Sidebar Navigation -->
+    <div class="sidebar">
+        <div class="logo-container">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24">
+                    <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                </svg>
+            </div>
+            <div class="logo-text">Stoud v3</div>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item active">
+                <a href="/">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                    Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/scheduled">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    Schedules
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/playlists">
+                    <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    Playlists
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/saved">
+                    <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                    Library
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/settings">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Settings
+                </a>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            Stoud v3.0.0
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="content-wrapper">
+        <div class="header">
+            <div class="page-title">
+                <h1>Streaming Control Cockpit</h1>
+                <p>Broadcasting, real-time analytics, break configurations, and queue monitors.</p>
+            </div>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                <span id="break-status-badge" class="video-badge direct" style="display: none; background: rgba(245, 158, 11, 0.15); color: var(--warning-color)">BREAK ACTIVE</span>
+                <span id="active-status-pill" class="status-pill idle">
+                    <span class="status-indicator"></span>
+                    <span id="active-status-text">Idle</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- Cockpit Layout Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <div>
+                <!-- Live Video Preview Player -->
+                <div class="card">
+                    <div class="card-title">Live Preview Player</div>
+                    <div id="preview-player-container" style="width: 100%; height: 260px; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--glass-border);">
+                        <div id="player-placeholder" style="color: var(--text-secondary); text-align: center;">
+                            <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom: 0.5rem; color: rgba(255,255,255,0.1);"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <div>Preview Offline - Stream Inactive</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Real-Time Stream Performance Stats -->
+                <div class="card" id="stream-metrics-card" style="display: none;">
+                    <div class="card-title">Broadcaster Metrics & Health</div>
+                    <div class="form-row" style="margin-bottom: 0.75rem;">
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">OUTPUT STATUS</span>
+                            <div id="metric-health" style="font-weight: 600; color: var(--success-color);">Active</div>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">BITRATE / SPEED</span>
+                            <div id="metric-bitrate" style="font-weight: 600; font-family: var(--font-mono);">0 kbps (1.0x)</div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">FRAMES RENDERED</span>
+                            <div id="metric-frames" style="font-weight: 600; font-family: var(--font-mono);">0 fps (0 total)</div>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">STREAM UPTIME</span>
+                            <div id="metric-uptime" style="font-weight: 600; font-family: var(--font-mono);">00:00:00</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instant Stream Launcher -->
+                <div class="card">
+                    <div class="card-title">Stream Launcher</div>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="form-group">
+                            <label for="stream-url">YouTube / Google Drive / Direct URL</label>
+                            <input type="text" id="stream-url" class="form-control" placeholder="Paste link here...">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="stream-quality">Streaming Method</label>
+                                <select id="stream-quality" class="form-control">
+                                    <option value="copy">Direct Copy (Low CPU)</option>
+                                    <option value="transcode">Transcode (High Compatibility)</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; align-items: flex-end; gap: 0.5rem;">
+                                <button class="btn btn-secondary" onclick="toggleLoopCurrentVideo()" id="btn-loop-current" style="height: 43px; flex-grow: 1;">
+                                    Loop Video: OFF
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <button class="btn btn-danger" onclick="stopStream()" style="height: 45px;">
+                                Terminate Stream
+                            </button>
+                            <button class="btn btn-primary" onclick="startStream()" style="height: 45px;">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="margin-right: 0.25rem;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                Start Stream
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Real-time Queue Modification Card -->
+                <div class="card">
+                    <div class="card-title">
+                        <span>Live Broadcast Queue</span>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary btn-sm" onclick="clearQueue()">Clear Queue</button>
+                            <button class="btn btn-primary btn-sm" onclick="openAddQueueModal()">+</button>
+                        </div>
+                    </div>
+                    <div id="live-queue-list" style="display: flex; flex-direction: column; gap: 0.50rem; max-height: 250px; overflow-y: auto;">
+                        <!-- Dynamic Queue listing -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal log cards -->
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                <div class="card" style="margin-bottom: 0; flex-grow: 1; display: flex; flex-direction: column;">
+                    <div class="card-title">
+                        <span>Live Broadcaster Terminal logs</span>
+                        <button class="btn btn-secondary btn-sm" onclick="clearLogs()">Clear Console</button>
+                    </div>
+                    <div class="console-container" style="flex-grow: 1; height: 550px;">
+                        <div class="console-header">
+                            <span>Process log thread output</span>
+                            <span id="log-status">Auto-scroll</span>
+                        </div>
+                        <div class="console-body" id="log-body">
+                            <div class="console-line success">Terminal active. Listening...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal to Add Queue Item -->
+    <div class="modal" id="add-queue-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Video to Queue</h2>
+                <button class="modal-close" onclick="closeAddQueueModal()">&times;</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group">
+                    <label for="queue-title">Video Label / Title</label>
+                    <input type="text" id="queue-title" class="form-control" placeholder="e.g. Next Movie Clip">
+                </div>
+                <div class="form-group">
+                    <label for="queue-url">YouTube or Google Drive URL</label>
+                    <input type="text" id="queue-url" class="form-control" placeholder="Paste link here...">
+                </div>
+                <div class="form-row" style="margin-top: 1rem;">
+                    <button class="btn btn-secondary" onclick="closeAddQueueModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="addVideoToQueueSubmit()">Add to Queue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>

@@ -11,53 +11,79 @@ class SettingsManager:
     def __init__(self, filepath=CONFIG_PATH):
         self.filepath = filepath
         self.lock = threading.Lock()
-        self.config = self._load()
+        self.config = self._load_local()
+        # Attempt to pull from GitHub on initialization if enabled
+        if self.config.get("settings", {}).get("github_backup", {}).get("enabled"):
+            self.sync_from_github()
 
-    def _load(self):
-        with self.lock:
-            if not os.path.exists(self.filepath):
-                # Return empty config structure if file does not exist
-                return {
-                    "settings": {
-                        "rtmp_url": "",
+    def _load_local(self):
+        if not os.path.exists(self.filepath):
+            return self._get_template_config()
+        try:
+            with open(self.filepath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading local config.json: {e}")
+            return self._get_template_config()
+
+    def _get_template_config(self):
+        return {
+            "settings": {
+                "destinations": [
+                    {
+                        "id": "youtube-default",
+                        "name": "YouTube Live",
+                        "rtmp_url": "rtmp://a.rtmp.youtube.com/live2",
                         "stream_key": "",
-                        "quality": "copy",
-                        "github_backup": {
-                            "enabled": False,
-                            "repo": "",
-                            "branch": "main",
-                            "token": "",
-                            "path": "stoud-config.json"
-                        }
-                    },
-                    "schedules": [],
-                    "playlists": [],
-                    "saved_videos": [],
-                    "active_stream": {
-                        "status": "idle",
-                        "current_video": None,
-                        "start_time": None,
-                        "pid": None,
-                        "log_file": None
+                        "enabled": True
                     }
+                ],
+                "quality": "copy",
+                "loop_current_video": False,
+                "github_backup": {
+                    "enabled": False,
+                    "repo": "",
+                    "branch": "main",
+                    "token": "",
+                    "path": "stoud-config.json"
+                },
+                "auto_ping_url": "",
+                "break_video_url": "",
+                "break_image_url": "",
+                "break_mode": false,
+                "intro_video_url": "",
+                "ending_video_url": ""
+            },
+            "schedules": [],
+            "playlists": [],
+            "saved_videos": [
+                {
+                    "id": "test-gdrive-video",
+                    "title": "Test GDrive Video",
+                    "url": "https://drive.google.com/file/d/1kGDTidwRBYEyXUmeuKmGnldu-k9wGtDu/view?usp=drive_link",
+                    "type": "gdrive"
                 }
-            try:
-                with open(self.filepath, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"Error loading config.json: {e}")
-                # Fallback template
-                return {}
+            ],
+            "active_stream": {
+                "status": "idle",
+                "current_video": None,
+                "start_time": None,
+                "pid": None,
+                "log_file": None
+            }
+        }
 
     def get_config(self):
+        # Dynamically sync from GitHub in real-time if enabled
+        if self.config.get("settings", {}).get("github_backup", {}).get("enabled"):
+            self.sync_from_github()
         with self.lock:
             return self.config
 
     def save(self):
         with self.lock:
             try:
-                # Always clear pid from saved config as it represents current running state
-                # that shouldn't persist across server restarts
+                # Clear PID in saved file so it doesn't persist
                 config_to_save = json.loads(json.dumps(self.config))
                 if "active_stream" in config_to_save:
                     config_to_save["active_stream"]["pid"] = None
@@ -73,6 +99,50 @@ class SettingsManager:
             threading.Thread(target=self._backup_to_github, daemon=True).start()
         return True
 
+    def sync_from_github(self):
+        gh = self.config.get("settings", {}).get("github_backup", {})
+        repo = gh.get("repo")
+        token = gh.get("token")
+        branch = gh.get("branch", "main")
+        path = gh.get("path", "stoud-config.json")
+
+        if not repo or not token:
+            return False
+
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "Stoud-v2-Backup-Client"
+        }
+
+        url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={branch}"
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                resp_data = json.loads(resp.read().decode())
+                content_b64 = resp_data.get("content", "")
+                if content_b64:
+                    config_str = base64.b64decode(content_b64.encode('utf-8')).decode('utf-8')
+                    remote_config = json.loads(config_str)
+                    
+                    with self.lock:
+                        # Keep current local active_stream pid so we don't drop active streaming status
+                        current_active_stream = self.config.get("active_stream", {})
+                        self.config = remote_config
+                        if "active_stream" in self.config:
+                            # If remote says idle but we are streaming, keep our local stream status
+                            if current_active_stream.get("status") == "streaming" and self.config["active_stream"].get("status") == "idle":
+                                self.config["active_stream"] = current_active_stream
+                                
+                    # Write to local file so it is persisted
+                    with open(self.filepath, "w", encoding="utf-8") as f:
+                        json.dump(remote_config, f, indent=2)
+                    print("GitHub Data Sync: Successfully pulled configuration from GitHub.")
+                    return True
+        except Exception as e:
+            print(f"GitHub Data Sync: Failed to pull config from GitHub (falling back to local): {str(e)}")
+        return False
+
     def _backup_to_github(self):
         gh = self.config.get("settings", {}).get("github_backup", {})
         repo = gh.get("repo")
@@ -81,7 +151,6 @@ class SettingsManager:
         path = gh.get("path", "stoud-config.json")
 
         if not repo or not token:
-            print("GitHub Backup: Missing repo or token. Backup aborted.")
             return
 
         headers = {
@@ -90,7 +159,7 @@ class SettingsManager:
             "User-Agent": "Stoud-v2-Backup-Client"
         }
 
-        # 1. Get the current file SHA if it exists
+        # 1. Get SHA of file if exists
         sha = None
         url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={branch}"
         req = urllib.request.Request(url, headers=headers, method="GET")
@@ -106,13 +175,14 @@ class SettingsManager:
             print(f"GitHub Backup: Error checking file SHA: {str(e)}")
             return
 
-        # 2. Put the updated content
+        # 2. Put updated content
         put_url = f"https://api.github.com/repos/{repo}/contents/{path}"
         with self.lock:
-            # Clean pid for backup copy too
+            # Clean pid for backup copy
             clean_config = json.loads(json.dumps(self.config))
             if "active_stream" in clean_config:
                 clean_config["active_stream"]["pid"] = None
+                
             config_bytes = json.dumps(clean_config, indent=2).encode('utf-8')
             
         content_b64 = base64.b64encode(config_bytes).decode('utf-8')
@@ -135,7 +205,6 @@ class SettingsManager:
         except Exception as e:
             print(f"GitHub Backup: Failed uploading config: {str(e)}")
 
-    # Update helper methods
     def update_settings(self, settings_dict):
         self.config["settings"].update(settings_dict)
         return self.save()
@@ -143,8 +212,9 @@ class SettingsManager:
     def get_settings(self):
         return self.config.get("settings", {})
 
-    # Schedule management
     def get_schedules(self):
+        if self.config.get("settings", {}).get("github_backup", {}).get("enabled"):
+            self.sync_from_github()
         return self.config.get("schedules", [])
 
     def add_schedule(self, schedule_dict):
@@ -162,8 +232,9 @@ class SettingsManager:
                 break
         return self.save()
 
-    # Playlists
     def get_playlists(self):
+        if self.config.get("settings", {}).get("github_backup", {}).get("enabled"):
+            self.sync_from_github()
         return self.config.get("playlists", [])
 
     def add_playlist(self, playlist_dict):
@@ -181,8 +252,9 @@ class SettingsManager:
                 break
         return self.save()
 
-    # Saved Videos
     def get_saved_videos(self):
+        if self.config.get("settings", {}).get("github_backup", {}).get("enabled"):
+            self.sync_from_github()
         return self.config.get("saved_videos", [])
 
     def add_saved_video(self, video_dict):
@@ -193,7 +265,6 @@ class SettingsManager:
         self.config["saved_videos"] = [v for v in self.config["saved_videos"] if v.get("id") != video_id]
         return self.save()
 
-    # Active Stream
     def get_active_stream(self):
         return self.config.get("active_stream", {})
 
