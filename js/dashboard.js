@@ -1,9 +1,8 @@
 let isStreaming = false;
 let logLinesCount = 0;
-let logsCleared = false;
 let currentPlayingUrl = "";
-let currentPlayingTitle = "";
 let currentLoopState = false;
+let savedDestinations = [];
 
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -45,7 +44,7 @@ function updatePreviewPlayer(url, title) {
         return;
     }
 
-    if (currentPlayingUrl === url) return; // Already loading/playing
+    if (currentPlayingUrl === url) return;
     currentPlayingUrl = url;
 
     const ytId = getYouTubeId(url);
@@ -71,7 +70,7 @@ function updatePreviewPlayer(url, title) {
             <div style="color: var(--text-secondary); text-align: center; padding: 1rem;">
                 <div style="font-weight:600; margin-bottom: 0.5rem; color: #fff;">External Link Broadcast</div>
                 <div class="video-url" style="max-width: 300px; margin: 0 auto; margin-bottom: 1rem;">${url}</div>
-                <div style="font-size:0.8rem;">Preview unavailable for this format. Stream is transmitting in background.</div>
+                <div style="font-size:0.8rem;">Preview unavailable. Stream is running.</div>
             </div>
         `;
     }
@@ -87,7 +86,6 @@ async function fetchStatus() {
         const metricsCard = document.getElementById("stream-metrics-card");
         const breakBadge = document.getElementById("break-status-badge");
         
-        // Show break status
         breakBadge.style.display = data.break_mode ? "inline-block" : "none";
         
         if (data.status === "streaming") {
@@ -95,7 +93,6 @@ async function fetchStatus() {
             pill.className = "status-pill streaming";
             pillText.innerText = data.title === "Break Stream" ? "Break Mode Active" : "Broadcasting Live";
             
-            // Show metrics
             metricsCard.style.display = "block";
             
             const met = data.metrics || {};
@@ -105,7 +102,6 @@ async function fetchStatus() {
             document.getElementById("metric-frames").innerText = `${met.fps || "N/A"} fps (frame ${met.frame || "0"})`;
             document.getElementById("metric-uptime").innerText = met.time || "00:00:00";
             
-            // Load preview player
             updatePreviewPlayer(data.url, data.title);
         } else {
             isStreaming = false;
@@ -115,7 +111,7 @@ async function fetchStatus() {
             updatePreviewPlayer(null, null);
         }
         
-        // Update Video Loop button text state
+        // Loop State Button Update
         currentLoopState = data.loop_current_video;
         const btnLoop = document.getElementById("btn-loop-current");
         if (currentLoopState) {
@@ -126,10 +122,9 @@ async function fetchStatus() {
             btnLoop.className = "btn btn-secondary";
         }
         
-        // Render Active Queue
         renderQueue(data.queue || []);
         
-        // Update Console Logs
+        // Update Logs Console
         const logBody = document.getElementById("log-body");
         let logsToRender = data.logs || [];
         
@@ -196,24 +191,153 @@ function renderQueue(queue) {
     });
 }
 
+// Load configurations, populate destinations list and dynamic selectors (Intro, Ending, Break)
+async function initDashboard() {
+    try {
+        const response = await fetch("/api/config");
+        const config = await response.json();
+        
+        const settings = config.settings || {};
+        savedDestinations = settings.destinations || [];
+        
+        // 1. Populate Dest Ingest selector
+        const destSelect = document.getElementById("destination-selector");
+        destSelect.innerHTML = `<option value="custom">-- Custom RTMP Ingest URL --</option>`;
+        savedDestinations.forEach(d => {
+            destSelect.innerHTML += `<option value="${d.id}">${d.name} (${d.enabled ? 'Enabled' : 'Disabled'})</option>`;
+        });
+        
+        // Pre-select first enabled destination if available
+        const firstEnabled = savedDestinations.find(d => d.enabled);
+        if (firstEnabled) {
+            destSelect.value = firstEnabled.id;
+            applySavedDestination();
+        }
+
+        // Render targets list in analytics panel
+        const destListDiv = document.getElementById("active-destinations-list");
+        destListDiv.innerHTML = "";
+        savedDestinations.forEach(d => {
+            const row = document.createElement("div");
+            row.style.display = "flex";
+            row.style.justifyContent = "space-between";
+            row.style.alignItems = "center";
+            row.style.fontSize = "0.85rem;";
+            row.innerHTML = `
+                <span style="font-weight:500;">${d.name}</span>
+                <span class="video-badge ${d.enabled ? 'success' : 'idle'}" style="font-size:0.65rem;">
+                    ${d.enabled ? 'ACTIVE' : 'DISABLED'}
+                </span>
+            `;
+            destListDiv.appendChild(row);
+        });
+
+        // 2. Populate Intro, Outro, Break selectors from Library bookmarks
+        const introSel = document.getElementById("intro-selector");
+        const outroSel = document.getElementById("outro-selector");
+        const breakSel = document.getElementById("break-selector");
+        
+        const library = config.saved_videos || [];
+        library.forEach(v => {
+            const opt = `<option value="${v.url}">${v.title}</option>`;
+            introSel.innerHTML += opt;
+            outroSel.innerHTML += opt;
+            breakSel.innerHTML += opt;
+        });
+
+        // Set initial addon values from settings config
+        introSel.value = settings.intro_video_url || "";
+        outroSel.value = settings.ending_video_url || "";
+        breakSel.value = settings.break_video_url || "";
+
+        // 3. Load Schedules List
+        renderHomeSchedules(config.schedules || []);
+        
+    } catch (err) {
+        console.error("Error initializing cockpit configurations:", err);
+    }
+}
+
+function applySavedDestination() {
+    const selectedId = document.getElementById("destination-selector").value;
+    const customGroup = document.getElementById("custom-rtmp-group");
+    const rtmpUrlInput = document.getElementById("custom-rtmp-url");
+    
+    if (selectedId === "custom") {
+        customGroup.style.display = "block";
+        rtmpUrlInput.value = "";
+    } else {
+        customGroup.style.display = "none";
+        const dest = savedDestinations.find(d => d.id === selectedId);
+        if (dest) {
+            // Concatenate URL and key
+            rtmpUrlInput.value = `${dest.rtmp_url.rstrip('/')}/${dest.stream_key}`;
+        }
+    }
+}
+
+// Add string prototype helper if needed
+String.prototype.rstrip = function(chars) {
+    let end = this.length - 1;
+    while (end >= 0 && (chars || " \t\r\n").indexOf(this[end]) !== -1) {
+        end--;
+    }
+    return this.substring(0, end + 1);
+};
+
+// Save launcher selections back to server to reflect in scheduling injections
+async function saveLauncherAddons() {
+    const introVal = document.getElementById("intro-selector").value;
+    const outroVal = document.getElementById("outro-selector").value;
+    const breakVal = document.getElementById("break-selector").value;
+    
+    try {
+        const confResp = await fetch("/api/config");
+        const config = await confResp.json();
+        
+        config.settings.intro_video_url = introVal;
+        config.settings.ending_video_url = outroVal;
+        config.settings.break_video_url = breakVal;
+        
+        await fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(config.settings)
+        });
+    } catch (e) {
+        console.error("Failed to sync launcher addon selections to settings:", e);
+    }
+}
+
 async function startStream() {
     const urlInput = document.getElementById("stream-url");
     const qualitySelect = document.getElementById("stream-quality");
+    const rtmpInput = document.getElementById("custom-rtmp-url");
     
     const url = urlInput.value.trim();
     const quality = qualitySelect.value;
+    const rtmp_url = rtmpInput.value.trim();
     
     if (!url) {
         showToast("Please enter a video URL first.", "danger");
         return;
     }
     
+    // Save selector preferences first
+    await saveLauncherAddons();
+    
     showToast("Resolving stream URL inputs...");
     try {
+        const payload = { url, quality };
+        // If Custom RTMP or destination URL is filled, pass it
+        if (rtmp_url) {
+            payload.rtmp_url = rtmp_url;
+        }
+        
         const response = await fetch("/api/stream/start", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url, quality })
+            body: JSON.stringify(payload)
         });
         const data = await response.json();
         if (data.success) {
@@ -245,10 +369,8 @@ async function stopStream() {
 
 async function toggleLoopCurrentVideo() {
     try {
-        // Toggle the local state
         const targetState = !currentLoopState;
         
-        // Fetch current config to modify settings
         const confResp = await fetch("/api/config");
         const config = await confResp.json();
         
@@ -264,11 +386,57 @@ async function toggleLoopCurrentVideo() {
         if (data.success) {
             showToast(`Loop Video toggled ${targetState ? "ON" : "OFF"}`);
             fetchStatus();
-        } else {
-            showToast("Failed to save loop configuration.", "danger");
         }
     } catch (err) {
         showToast("Connection error while setting loop mode.", "danger");
+    }
+}
+
+function renderHomeSchedules(schedules) {
+    const tbody = document.getElementById("home-schedules-tbody");
+    
+    if (schedules.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                    No schedules planned. Go to Schedules page to add.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = "";
+    schedules.slice(0, 5).forEach(s => {
+        const row = document.createElement("tr");
+        
+        const dt = new Date(s.time.replace("T", " "));
+        const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + dt.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        
+        row.innerHTML = `
+            <td><strong>${s.name}</strong></td>
+            <td><span style="font-family: var(--font-mono); font-size: 0.8rem;">${timeStr}</span></td>
+            <td style="text-align: right;">
+                <button class="btn btn-primary btn-sm" onclick="runScheduleNow('${s.id}')">Stream Now</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+async function runScheduleNow(id) {
+    showToast("Launching schedule immediately...");
+    try {
+        const response = await fetch(`/api/schedules/${id}/run`, { method: "POST" });
+        const data = await response.json();
+        if (data.success) {
+            showToast("Schedule started streaming!");
+            fetchStatus();
+        } else {
+            showToast(`Could not start: ${data.error}`, "danger");
+        }
+    } catch (err) {
+        showToast("Error triggering schedule stream.", "danger");
     }
 }
 
@@ -302,8 +470,6 @@ async function addVideoToQueueSubmit() {
             showToast("Video added to live queue!");
             closeAddQueueModal();
             fetchStatus();
-        } else {
-            showToast("Failed to add item to queue.", "danger");
         }
     } catch (err) {
         showToast("Error adding item to queue.", "danger");
@@ -317,8 +483,6 @@ async function removeQueueItem(index) {
         if (data.success) {
             showToast("Item removed from active queue.");
             fetchStatus();
-        } else {
-            showToast("Failed to remove item.", "danger");
         }
     } catch (err) {
         showToast("Error removing queue item.", "danger");
@@ -344,6 +508,9 @@ function clearLogs() {
     logLinesCount = 0;
 }
 
-// Start Poll loop
+// Initialise
+initDashboard();
 fetchStatus();
 setInterval(fetchStatus, 2000);
+// Also refresh lists every 10 seconds
+setInterval(initDashboard, 10000);

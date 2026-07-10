@@ -199,19 +199,19 @@ def resolve_gdrive_url(url):
         add_log(f"Failed to fetch GDrive warning page: {str(e)}")
         raise Exception(f"Failed to fetch GDrive warning page: {str(e)}")
         
-    confirm_token = None
-    match = re.search(r'confirm=([a-zA-Z0-9_-]+)', html)
-    if match:
-        confirm_token = match.group(1)
-        
+    # Extract all hidden inputs from the warning form (id, export, confirm, uuid, etc.)
+    inputs = re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]+)">', html)
+    
     cookies = []
     for cookie in cj:
         cookies.append(f"{cookie.name}={cookie.value}")
     cookie_str = "; ".join(cookies) if cookies else None
     
-    if confirm_token:
-        direct_url = f"https://docs.google.com/uc?export=download&confirm={confirm_token}&id={file_id}"
-        add_log("Bypassed Google Drive virus scan warning successfully.")
+    if inputs:
+        import urllib.parse
+        params = urllib.parse.urlencode(dict(inputs))
+        direct_url = f"https://drive.usercontent.google.com/download?{params}"
+        add_log("Bypassed Google Drive virus scan warning successfully (extracted dynamic tokens).")
     else:
         direct_url = resp.geturl()
         add_log("Google Drive direct download link obtained.")

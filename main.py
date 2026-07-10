@@ -101,12 +101,23 @@ def api_start_stream():
     if not url:
         return jsonify({"success": False, "error": "URL parameter is required"}), 400
         
-    config = settings_mgr.get_config()
-    destinations = config.get("settings", {}).get("destinations", [])
+    custom_rtmp = data.get("rtmp_url")
+    if custom_rtmp:
+        destinations = [{
+            "id": "custom",
+            "name": "Custom Platform",
+            "rtmp_url": custom_rtmp,
+            "stream_key": "",
+            "enabled": True
+        }]
+    else:
+        config = settings_mgr.get_config()
+        destinations = config.get("settings", {}).get("destinations", [])
+        
     enabled_dests = [d for d in destinations if d.get("enabled")]
     
     if not enabled_dests:
-        return jsonify({"success": False, "error": "No active stream destinations configured or enabled in settings."}), 400
+        return jsonify({"success": False, "error": "No stream destinations configured. Set platforms in Settings or paste a direct RTMP link."}), 400
         
     try:
         runner.current_queue = []

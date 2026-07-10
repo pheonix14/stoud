@@ -62,8 +62,8 @@
     <div class="content-wrapper">
         <div class="header">
             <div class="page-title">
-                <h1>Streaming Control Cockpit</h1>
-                <p>Broadcasting, real-time analytics, break configurations, and queue monitors.</p>
+                <h1>Streaming Cockpit</h1>
+                <p>Configure RTMPs, intros, breakouts, loop formats and dynamic queues in one unified dashboard.</p>
             </div>
             <div style="display: flex; gap: 0.75rem; align-items: center;">
                 <span id="break-status-badge" class="video-badge direct" style="display: none; background: rgba(245, 158, 11, 0.15); color: var(--warning-color)">BREAK ACTIVE</span>
@@ -76,7 +76,9 @@
 
         <!-- Cockpit Layout Grid -->
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
-            <div>
+            <!-- Left Side Control Panel -->
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                
                 <!-- Live Video Preview Player -->
                 <div class="card">
                     <div class="card-title">Live Preview Player</div>
@@ -88,45 +90,73 @@
                     </div>
                 </div>
 
-                <!-- Real-Time Stream Performance Stats -->
+                <!-- Broadcaster Metrics & Platform Outlets -->
                 <div class="card" id="stream-metrics-card" style="display: none;">
-                    <div class="card-title">Broadcaster Metrics & Health</div>
-                    <div class="form-row" style="margin-bottom: 0.75rem;">
+                    <div class="card-title">Real-Time Ingestion Analytics</div>
+                    <div class="form-row" style="margin-bottom: 1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 1rem;">
                         <div>
-                            <span style="color: var(--text-secondary); font-size: 0.8rem;">OUTPUT STATUS</span>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">OUTPUT ENGINE HEALTH</span>
                             <div id="metric-health" style="font-weight: 600; color: var(--success-color);">Active</div>
                         </div>
                         <div>
-                            <span style="color: var(--text-secondary); font-size: 0.8rem;">BITRATE / SPEED</span>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">TRANSMISSION BITRATE / SPEED</span>
                             <div id="metric-bitrate" style="font-weight: 600; font-family: var(--font-mono);">0 kbps (1.0x)</div>
                         </div>
                     </div>
                     <div class="form-row">
                         <div>
-                            <span style="color: var(--text-secondary); font-size: 0.8rem;">FRAMES RENDERED</span>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">FRAMES / RESOLUTION FPS</span>
                             <div id="metric-frames" style="font-weight: 600; font-family: var(--font-mono);">0 fps (0 total)</div>
                         </div>
                         <div>
-                            <span style="color: var(--text-secondary); font-size: 0.8rem;">STREAM UPTIME</span>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem;">ACTIVE RUNTIME</span>
                             <div id="metric-uptime" style="font-weight: 600; font-family: var(--font-mono);">00:00:00</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Active Platforms List -->
+                    <div style="margin-top: 1.25rem;">
+                        <span style="color: var(--text-secondary); font-size: 0.8rem; display: block; margin-bottom: 0.5rem;">BROADCASTING TO OUTLETS</span>
+                        <div id="active-destinations-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <!-- Populated dynamically -->
                         </div>
                     </div>
                 </div>
 
-                <!-- Instant Stream Launcher -->
+                <!-- Unified Stream Launcher Panel -->
                 <div class="card">
-                    <div class="card-title">Stream Launcher</div>
+                    <div class="card-title">Unified Stream Launcher</div>
                     <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        
+                        <!-- Video Input URL -->
                         <div class="form-group">
-                            <label for="stream-url">YouTube / Google Drive / Direct URL</label>
-                            <input type="text" id="stream-url" class="form-control" placeholder="Paste link here...">
+                            <label for="stream-url">Video Source Link (YouTube, GDrive, Direct Link)</label>
+                            <input type="text" id="stream-url" class="form-control" placeholder="https://...">
                         </div>
+
+                        <!-- Ingestion Destination Config -->
+                        <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 10px; border: 1px solid var(--glass-border);">
+                            <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">RTMP Target Platform</label>
+                            <div class="form-group" style="margin-bottom: 0.75rem;">
+                                <label for="destination-selector" style="font-size: 0.8rem;">Select Target Ingest (From settings)</label>
+                                <select id="destination-selector" class="form-control" onchange="applySavedDestination()">
+                                    <option value="custom">-- Custom RTMP Stream Link --</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group" id="custom-rtmp-group" style="margin-bottom: 0;">
+                                <label for="custom-rtmp-url" style="font-size: 0.8rem;">Or Paste Direct RTMP Stream Link (Server + Key)</label>
+                                <input type="text" id="custom-rtmp-url" class="form-control" placeholder="rtmp://a.rtmp.youtube.com/live2/xxxx-xxxx-xxxx">
+                            </div>
+                        </div>
+
+                        <!-- Video loop & Quality controls -->
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="stream-quality">Streaming Method</label>
                                 <select id="stream-quality" class="form-control">
-                                    <option value="copy">Direct Copy (Low CPU)</option>
-                                    <option value="transcode">Transcode (High Compatibility)</option>
+                                    <option value="copy">Direct Copy (Low CPU, recommended)</option>
+                                    <option value="transcode">Transcode (H264/AAC, high compatibility)</option>
                                 </select>
                             </div>
                             <div style="display: flex; align-items: flex-end; gap: 0.5rem;">
@@ -135,6 +165,33 @@
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Intro, Ending & Break Selections -->
+                        <div class="form-row" style="background: rgba(255,255,255,0.01); padding: 0.75rem; border-radius: 10px; border: 1px solid var(--glass-border);">
+                            <div class="form-group">
+                                <label for="intro-selector">Intro Video</label>
+                                <select id="intro-selector" class="form-control" onchange="saveLauncherAddons()">
+                                    <option value="">-- None --</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="outro-selector">Ending Outro</label>
+                                <select id="outro-selector" class="form-control" onchange="saveLauncherAddons()">
+                                    <option value="">-- None --</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="break-selector">Break Video</label>
+                                <select id="break-selector" class="form-control" onchange="saveLauncherAddons()">
+                                    <option value="">-- None --</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Action row buttons -->
                         <div class="form-row">
                             <button class="btn btn-danger" onclick="stopStream()" style="height: 45px;">
                                 Terminate Stream
@@ -147,8 +204,36 @@
                     </div>
                 </div>
 
-                <!-- Real-time Queue Modification Card -->
+                <!-- Schedules Overview Card with Stream Now triggers -->
                 <div class="card">
+                    <div class="card-title">Schedules Planner</div>
+                    <div style="max-height: 250px; overflow-y: auto;">
+                        <table class="data-table" style="margin-top: 0;">
+                            <thead>
+                                <tr>
+                                    <th>Event Title</th>
+                                    <th>Start Time</th>
+                                    <th style="text-align: right;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="home-schedules-tbody">
+                                <tr>
+                                    <td colspan="3" style="text-align: center; color: var(--text-secondary); padding: 1.5rem;">
+                                        Loading schedules...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Side Console & Queue Monitors -->
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                
+                <!-- Real-time Queue Modification Card -->
+                <div class="card" style="margin-bottom: 0;">
                     <div class="card-title">
                         <span>Live Broadcast Queue</span>
                         <div style="display: flex; gap: 0.5rem;">
@@ -160,16 +245,14 @@
                         <!-- Dynamic Queue listing -->
                     </div>
                 </div>
-            </div>
 
-            <!-- Terminal log cards -->
-            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                <!-- Terminal log cards -->
                 <div class="card" style="margin-bottom: 0; flex-grow: 1; display: flex; flex-direction: column;">
                     <div class="card-title">
                         <span>Live Broadcaster Terminal logs</span>
                         <button class="btn btn-secondary btn-sm" onclick="clearLogs()">Clear Console</button>
                     </div>
-                    <div class="console-container" style="flex-grow: 1; height: 550px;">
+                    <div class="console-container" style="flex-grow: 1; height: 420px;">
                         <div class="console-header">
                             <span>Process log thread output</span>
                             <span id="log-status">Auto-scroll</span>
