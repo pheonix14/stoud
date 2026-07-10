@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stoud v2 - Settings Control Panel</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <div class="bg-glow-secondary"></div>
+
+    <!-- Sidebar Navigation -->
+    <div class="sidebar">
+        <div class="logo-container">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24">
+                    <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                </svg>
+            </div>
+            <div class="logo-text">Stoud v2</div>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="/">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                    Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/scheduled">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    Schedules
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/playlists">
+                    <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    Playlists
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/saved">
+                    <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                    Library
+                </a>
+            </li>
+            <li class="nav-item active">
+                <a href="/settings">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Settings
+                </a>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            Stoud v2.0.0
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="content-wrapper" style="max-width: 900px;">
+        <div class="header">
+            <div class="page-title">
+                <h1>Configuration Control</h1>
+                <p>Manage RTMP ingestion parameters, system binaries, and cloud backup integrations.</p>
+            </div>
+        </div>
+
+        <!-- FFmpeg Status Card -->
+        <div class="card">
+            <div class="card-title">System Dependency Status</div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 1.1rem;">FFmpeg Executable Engine</strong>
+                    <div id="ffmpeg-status-descr" style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem;">
+                        Checking system configuration...
+                    </div>
+                </div>
+                <button id="ffmpeg-btn" class="btn btn-secondary" onclick="downloadFFmpeg()" style="display: none;">
+                    Download Standalone Windows Build
+                </button>
+            </div>
+        </div>
+
+        <!-- Global RTMP & Quality settings -->
+        <div class="card">
+            <div class="card-title">RTMP Streaming Targets</div>
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div class="form-group">
+                    <label for="rtmp-url">RTMP Server Ingestion URL</label>
+                    <input type="text" id="rtmp-url" class="form-control" placeholder="e.g. rtmp://a.rtmp.youtube.com/live2">
+                    <span style="color: var(--text-secondary); font-size: 0.8rem;">The base RTMP address provided by YouTube Live, Twitch, or Facebook Live.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="stream-key">Stream Key</label>
+                    <input type="password" id="stream-key" class="form-control" placeholder="Paste private stream key here...">
+                    <span style="color: var(--text-secondary); font-size: 0.8rem;">Your private broadcast key. Handled securely and hidden on saving.</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="default-quality">Default Streaming Method</label>
+                    <select id="default-quality" class="form-control">
+                        <option value="copy">Direct Stream Copy (Recommended, matches source exactly, near 0% CPU)</option>
+                        <option value="transcode">Transcode Stream (H264/AAC at 720p, high CPU usage, maximum stability)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- GitHub config sync settings -->
+        <div class="card">
+            <div class="card-title">
+                <span>GitHub Repository Backup Sync</span>
+                <span class="video-badge direct" style="background: rgba(139, 92, 246, 0.1); color: var(--accent-color); font-weight: 500;">Beta Storage Mode</span>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.25rem; line-height: 1.4;">
+                Enable cloud backup to automatically sync your schedules, playlists, settings, and library database to a GitHub repository contents using GitHub API (does not require git binary).
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="checkbox" id="git-enabled" style="width: 18px; height: 18px; cursor: pointer;" onchange="toggleGitFields()">
+                    <label for="git-enabled" style="font-weight: 600; cursor: pointer;">Enable GitHub configuration autosave sync</label>
+                </div>
+                
+                <div id="git-fields-container" style="display: none; flex-direction: column; gap: 1.25rem; border-top: 1px solid var(--glass-border); padding-top: 1.25rem;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="git-repo">Repository Path (owner/repo)</label>
+                            <input type="text" id="git-repo" class="form-control" placeholder="e.g. octocat/my-stream-configs">
+                        </div>
+                        <div class="form-group">
+                            <label for="git-branch">Target Branch</label>
+                            <input type="text" id="git-branch" class="form-control" placeholder="main">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="git-path">File Path inside Repository</label>
+                            <input type="text" id="git-path" class="form-control" placeholder="stoud-config.json">
+                        </div>
+                        <div class="form-group">
+                            <label for="git-token">GitHub Personal Access Token (PAT)</label>
+                            <input type="password" id="git-token" class="form-control" placeholder="ghp_...">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.05rem;" onclick="saveAllSettings()">
+            Save Configuration Changes
+        </button>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        let ffmpegInterval = null;
+
+        function showToast(message, type = "success") {
+            const container = document.getElementById("toast-container");
+            const toast = document.createElement("div");
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${message}</span>
+                <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch("/api/config");
+                const config = await response.json();
+                
+                const s = config.settings || {};
+                document.getElementById("rtmp-url").value = s.rtmp_url || "";
+                document.getElementById("stream-key").value = s.stream_key || "";
+                document.getElementById("default-quality").value = s.quality || "copy";
+                
+                const gh = s.github_backup || {};
+                document.getElementById("git-enabled").checked = gh.enabled || false;
+                document.getElementById("git-repo").value = gh.repo || "";
+                document.getElementById("git-branch").value = gh.branch || "main";
+                document.getElementById("git-path").value = gh.path || "stoud-config.json";
+                document.getElementById("git-token").value = gh.token || "";
+                
+                toggleGitFields();
+            } catch (err) {
+                showToast("Failed to load settings from server.", "danger");
+            }
+        }
+
+        function toggleGitFields() {
+            const enabled = document.getElementById("git-enabled").checked;
+            const fields = document.getElementById("git-fields-container");
+            fields.style.display = enabled ? "flex" : "none";
+        }
+
+        async function checkFFmpegStatus() {
+            try {
+                const response = await fetch("/api/status");
+                const data = await response.json();
+                const status = data.ffmpeg;
+                const descr = document.getElementById("ffmpeg-status-descr");
+                const btn = document.getElementById("ffmpeg-btn");
+                
+                descr.innerText = `Current Status: ${status}`;
+                
+                if (status === "Not Installed" || status === "Download Failed" || status === "Extraction Failed") {
+                    btn.style.display = "block";
+                    btn.innerText = "Download Standalone Windows Build";
+                    btn.disabled = false;
+                    clearInterval(ffmpegInterval);
+                } else if (status.startsWith("Downloading") || status.startsWith("Extracting")) {
+                    btn.style.display = "block";
+                    btn.innerText = "Processing Setup...";
+                    btn.disabled = true;
+                    // Keep polling
+                    if (!ffmpegInterval) {
+                        ffmpegInterval = setInterval(checkFFmpegStatus, 1500);
+                    }
+                } else {
+                    btn.style.display = "none";
+                    clearInterval(ffmpegInterval);
+                }
+            } catch (err) {
+                console.error("Error reading FFmpeg status:", err);
+            }
+        }
+
+        async function downloadFFmpeg() {
+            try {
+                const response = await fetch("/api/ffmpeg/download", { method: "POST" });
+                const data = await response.json();
+                if (data.success) {
+                    showToast("FFmpeg download thread spawned. Monitor progress below.");
+                    checkFFmpegStatus();
+                    ffmpegInterval = setInterval(checkFFmpegStatus, 1500);
+                } else {
+                    showToast("Failed to start downloader.", "danger");
+                }
+            } catch (err) {
+                showToast("Connection error while triggering download.", "danger");
+            }
+        }
+
+        async function saveAllSettings() {
+            const rtmp_url = document.getElementById("rtmp-url").value.trim();
+            const stream_key = document.getElementById("stream-key").value.trim();
+            const quality = document.getElementById("default-quality").value;
+            
+            const git_enabled = document.getElementById("git-enabled").checked;
+            const git_repo = document.getElementById("git-repo").value.trim();
+            const git_branch = document.getElementById("git-branch").value.trim();
+            const git_path = document.getElementById("git-path").value.trim();
+            const git_token = document.getElementById("git-token").value.trim();
+            
+            const payload = {
+                rtmp_url,
+                stream_key,
+                quality,
+                github_backup: {
+                    enabled: git_enabled,
+                    repo: git_repo,
+                    branch: git_branch || "main",
+                    path: git_path || "stoud-config.json",
+                    token: git_token
+                }
+            };
+            
+            try {
+                const response = await fetch("/api/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast("Configuration saved successfully!");
+                    if (git_enabled) {
+                        showToast("GitHub Backup triggered in background.");
+                    }
+                    loadConfig();
+                } else {
+                    showToast("Failed to save settings.", "danger");
+                }
+            } catch (err) {
+                showToast("Connection error saving configuration.", "danger");
+            }
+        }
+
+        // Initialize Settings Panel
+        loadConfig();
+        checkFFmpegStatus();
+    </script>
+</body>
+</html>

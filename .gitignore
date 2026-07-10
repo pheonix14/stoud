@@ -1,0 +1,25 @@
+# Binaries
+ffmpeg.exe
+ffprobe.exe
+ffmpeg_temp.zip
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Local Config
+config.json
+
+# Logs
+logs/
+*.log
+
+# Environments
+venv/
+.env
+
+# Editor files
+.vscode/
+.idea/
+.DS_Store
+d.txt
