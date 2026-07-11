@@ -103,12 +103,23 @@ async function fetchStatus() {
             document.getElementById("metric-uptime").innerText = met.time || "00:00:00";
             
             updatePreviewPlayer(data.url, data.title);
+            
+            document.getElementById("btn-start-stream").style.display = "none";
+            document.getElementById("btn-stop-stream").style.display = "flex";
+            document.getElementById("stream-url").disabled = true;
+            if (document.getElementById("stream-url").value === "") {
+                document.getElementById("stream-url").value = data.url;
+            }
         } else {
             isStreaming = false;
             pill.className = "status-pill idle";
             pillText.innerText = "Idle";
             metricsCard.style.display = "none";
             updatePreviewPlayer(null, null);
+            
+            document.getElementById("btn-start-stream").style.display = "flex";
+            document.getElementById("btn-stop-stream").style.display = "none";
+            document.getElementById("stream-url").disabled = false;
         }
         
         // Loop State Button Update

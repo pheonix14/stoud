@@ -26,6 +26,16 @@ def parse_schedule_time(time_str):
 
 def add_to_queue(url, title):
     global current_queue
+    if "list=" in url or "playlist" in url:
+        try:
+            items = player.extract_playlist_items(url)
+            current_queue.extend(items)
+            player.add_log(f"Added {len(items)} playlist items to active queue.")
+            return True
+        except Exception as e:
+            player.add_log(f"Failed to add playlist to queue: {str(e)}")
+            return False
+            
     # Detect video type
     video_type = "youtube" if ("youtube.com" in url or "youtu.be" in url) else ("gdrive" if "drive.google.com" in url else "direct")
     item = {"url": url, "title": title, "type": video_type}
@@ -81,6 +91,7 @@ def runner_loop():
             
             destinations = settings.get("destinations", [])
             quality = settings.get("quality", "copy")
+            budget_mode = settings.get("budget_mode", False)
             
             break_mode = settings.get("break_mode", False)
             break_video_url = settings.get("break_video_url", "")
@@ -105,7 +116,7 @@ def runner_loop():
                     if break_video_url:
                         try:
                             player.add_log(f"Watchdog: Break Mode is Active. Starting Break Stream: {break_video_url}")
-                            player.start_stream(break_video_url, destinations, quality)
+                            player.start_stream(break_video_url, destinations, quality, budget_mode=budget_mode)
                             settings_mgr.update_active_stream({
                                 "status": "streaming",
                                 "current_video": {"title": "Break Stream", "url": break_video_url},
@@ -124,7 +135,7 @@ def runner_loop():
                     
                     try:
                         player.add_log(f"Queue: Starting next item: '{title}'")
-                        player.start_stream(url, destinations, quality)
+                        player.start_stream(url, destinations, quality, budget_mode=budget_mode)
                         settings_mgr.update_active_stream({
                             "status": "streaming",
                             "current_video": {"title": title, "url": url},

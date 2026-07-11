@@ -63,6 +63,7 @@ async function loadConfig() {
         document.getElementById("default-quality").value = s.quality || "copy";
         document.getElementById("auto-ping-url").value = s.auto_ping_url || "";
         document.getElementById("loop-current-video").checked = s.loop_current_video || false;
+        document.getElementById("budget-mode").checked = s.budget_mode || false;
         
         // Break Mode configs
         document.getElementById("break-mode").checked = s.break_mode || false;
@@ -228,6 +229,7 @@ async function saveAllSettings() {
     const quality = document.getElementById("default-quality").value;
     const auto_ping_url = document.getElementById("auto-ping-url").value.trim();
     const loop_current_video = document.getElementById("loop-current-video").checked;
+    const budget_mode = document.getElementById("budget-mode").checked;
     
     // Break mode configurations
     const break_mode = document.getElementById("break-mode").checked;
@@ -247,6 +249,7 @@ async function saveAllSettings() {
         destinations: destinationsList,
         quality,
         loop_current_video,
+        budget_mode,
         auto_ping_url,
         break_mode,
         break_video_url,

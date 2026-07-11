@@ -112,18 +112,36 @@ def api_start_stream():
         }]
     else:
         config = settings_mgr.get_config()
-        destinations = config.get("settings", {}).get("destinations", [])
+        settings = config.get("settings", {})
+        destinations = settings.get("destinations", [])
+        budget_mode = settings.get("budget_mode", False)
         
     enabled_dests = [d for d in destinations if d.get("enabled")]
     
     if not enabled_dests:
         return jsonify({"success": False, "error": "No stream destinations configured. Set platforms in Settings or paste a direct RTMP link."}), 400
         
+    for d in enabled_dests:
+        if d.get("rtmp_url") == "rtmp://a.rtmp.youtube.com/live2" and not d.get("stream_key"):
+            return jsonify({"success": False, "error": f"Stream key is missing for destination '{d.get('name')}'. Please configure it in Settings."}), 400
+            
     try:
-        runner.current_queue = []
+        budget_mode_flag = locals().get("budget_mode", False)
+        
+        if "list=" in url or "playlist" in url:
+            items = player.extract_playlist_items(url)
+            if not items:
+                return jsonify({"success": False, "error": "Playlist is empty or invalid."}), 400
+            
+            first_item = items.pop(0)
+            url = first_item["url"]
+            runner.current_queue = items
+        else:
+            runner.current_queue = []
+            
         runner.active_schedule_id = None
         
-        info = player.start_stream(url, destinations, quality)
+        info = player.start_stream(url, destinations, quality, budget_mode=budget_mode_flag)
         
         settings_mgr.update_active_stream({
             "status": "streaming",

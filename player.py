@@ -144,6 +144,40 @@ def add_log(message):
     if len(log_messages) > 300:
         log_messages.pop(0)
 
+def extract_playlist_items(url):
+    import yt_dlp
+    add_log(f"Extracting playlist items for: {url}")
+    ydl_opts = {
+        'extract_flat': True,
+        'quiet': True,
+        'no_warnings': True,
+    }
+    items = []
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            if 'entries' in info:
+                for entry in info['entries']:
+                    if entry and entry.get('url'):
+                        vid_url = entry.get('url')
+                        if not vid_url.startswith('http'):
+                            vid_url = f"https://www.youtube.com/watch?v={entry.get('id')}"
+                        items.append({
+                            "title": entry.get('title', 'Unknown Video'),
+                            "url": vid_url,
+                            "type": "youtube"
+                        })
+            else:
+                items.append({
+                    "title": info.get('title', 'Unknown Video'),
+                    "url": info.get('url', url),
+                    "type": "youtube"
+                })
+        except Exception as e:
+            add_log(f"yt-dlp playlist extraction failed: {str(e)}")
+            raise Exception(f"Failed to extract playlist: {str(e)}")
+    return items
+
 def resolve_youtube_url(url):
     import yt_dlp
     add_log(f"Resolving YouTube URL: {url}")
@@ -172,7 +206,9 @@ def resolve_youtube_url(url):
             return video_url, None, title, True
 
 def resolve_gdrive_url(url):
+    import yt_dlp
     add_log(f"Resolving Google Drive URL: {url}")
+    
     file_id = None
     m = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url)
     if m:
@@ -182,41 +218,23 @@ def resolve_gdrive_url(url):
         if m:
             file_id = m.group(1)
             
-    if not file_id:
-        add_log("Google Drive ID not found in the link.")
-        raise Exception("Could not parse Google Drive File ID from URL.")
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+        except Exception as e:
+            add_log(f"yt-dlp GDrive extraction failed: {str(e)}")
+            raise Exception(f"yt-dlp GDrive extraction failed: {str(e)}")
+            
+        title = info.get('title', f'GDrive Video ({file_id})') if info.get('title') else f'GDrive Video ({file_id})'
+        video_url = info.get('url')
+        user_agent = info.get('http_headers', {}).get('User-Agent', '')
         
-    cj = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-    
-    confirm_url = f"https://docs.google.com/uc?export=download&id={file_id}"
-    req = urllib.request.Request(confirm_url, headers={"User-Agent": "Mozilla/5.0"})
-    
-    try:
-        with opener.open(req) as resp:
-            html = resp.read().decode('utf-8', errors='ignore')
-    except Exception as e:
-        add_log(f"Failed to fetch GDrive warning page: {str(e)}")
-        raise Exception(f"Failed to fetch GDrive warning page: {str(e)}")
-        
-    # Extract all hidden inputs from the warning form (id, export, confirm, uuid, etc.)
-    inputs = re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]+)">', html)
-    
-    cookies = []
-    for cookie in cj:
-        cookies.append(f"{cookie.name}={cookie.value}")
-    cookie_str = "; ".join(cookies) if cookies else None
-    
-    if inputs:
-        import urllib.parse
-        params = urllib.parse.urlencode(dict(inputs))
-        direct_url = f"https://drive.usercontent.google.com/download?{params}"
-        add_log("Bypassed Google Drive virus scan warning successfully (extracted dynamic tokens).")
-    else:
-        direct_url = resp.geturl()
-        add_log("Google Drive direct download link obtained.")
-        
-    return direct_url, cookie_str, f"GDrive Video ({file_id})"
+        add_log(f"Google Drive direct streaming link obtained via yt-dlp: {video_url}")
+        return video_url, user_agent, title
 
 # Regex to parse FFmpeg terminal outputs in real-time
 stats_regex = re.compile(
@@ -230,7 +248,7 @@ def log_reader_thread(process):
             line = process.stderr.readline()
             if not line:
                 break
-            line_str = line.decode('utf-8', errors='ignore').strip()
+            line_str = line.strip()
             if line_str:
                 # Add to text logs
                 add_log(f"[FFmpeg] {line_str}")
@@ -269,7 +287,7 @@ def log_reader_thread(process):
                 "time": "00:00:00"
             }
 
-def start_stream(video_url, destinations, quality="copy"):
+def start_stream(video_url, destinations, quality="copy", budget_mode=False):
     global active_process, active_thread, active_stream_info
     
     if active_process is not None:
@@ -291,13 +309,13 @@ def start_stream(video_url, destinations, quality="copy"):
     audio_input = None
     title = "Live Stream"
     is_combined = True
-    cookie_str = None
+    user_agent_str = None
     
     try:
         if is_youtube:
             video_input, audio_input, title, is_combined = resolve_youtube_url(video_url)
         elif is_gdrive:
-            video_input, cookie_str, title = resolve_gdrive_url(video_url)
+            video_input, user_agent_str, title = resolve_gdrive_url(video_url)
         else:
             video_input = video_url
             title = "Direct Video Stream"
@@ -309,10 +327,13 @@ def start_stream(video_url, destinations, quality="copy"):
     # Build FFmpeg command
     cmd = [ffmpeg_exe]
     
-    if cookie_str:
-        cmd.extend(["-headers", f"Cookie: {cookie_str}\r\n"])
+    if user_agent_str:
+        cmd.extend(["-user_agent", user_agent_str])
         
-    cmd.extend(["-re"])
+    cmd.extend(["-nostdin", "-y", "-re"])
+    
+    if budget_mode:
+        cmd.extend(["-threads", "1"])
     
     # Add input
     cmd.extend(["-i", video_input])
@@ -321,41 +342,54 @@ def start_stream(video_url, destinations, quality="copy"):
         
     # For multiple outputs, we specify mapping and output parameters for EACH destination
     for dest in enabled_dests:
-        full_rtmp_url = f"{dest['rtmp_url'].rstrip('/')}/{dest['stream_key']}"
+        full_rtmp_url = dest['rtmp_url']
+        if dest.get('stream_key'):
+            full_rtmp_url = f"{full_rtmp_url.rstrip('/')}/{dest['stream_key']}"
         
         if quality == "copy":
+            copy_args = [
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-strict", "experimental"
+            ]
+            if budget_mode:
+                copy_args.extend(["-max_muxing_queue_size", "256"])
+                
             if audio_input:
-                cmd.extend([
-                    "-map", "0:v:0",
-                    "-map", "1:a:0",
-                    "-c:v", "copy",
-                    "-c:a", "aac",
-                    "-strict", "experimental",
-                    "-f", "flv", full_rtmp_url
-                ])
-            else:
-                cmd.extend([
-                    "-c:v", "copy",
-                    "-c:a", "aac",
-                    "-strict", "experimental",
-                    "-f", "flv", full_rtmp_url
-                ])
+                cmd.extend(["-map", "0:v:0", "-map", "1:a:0"])
+                
+            cmd.extend(copy_args)
+            cmd.extend(["-f", "flv", full_rtmp_url])
         else:
             if audio_input:
                 cmd.extend(["-map", "0:v:0", "-map", "1:a:0"])
-            cmd.extend([
+            
+            transcode_args = [
                 "-c:v", "libx264",
                 "-preset", "veryfast",
-                "-b:v", "2500k",
-                "-maxrate", "2500k",
-                "-bufsize", "5000k",
                 "-pix_fmt", "yuv420p",
                 "-g", "60",
                 "-c:a", "aac",
                 "-b:a", "128k",
-                "-ar", "44100",
-                "-f", "flv", full_rtmp_url
-            ])
+                "-ar", "44100"
+            ]
+            
+            if budget_mode:
+                transcode_args.extend([
+                    "-b:v", "1500k",
+                    "-maxrate", "1500k",
+                    "-bufsize", "1000k",
+                    "-max_muxing_queue_size", "256"
+                ])
+            else:
+                transcode_args.extend([
+                    "-b:v", "2500k",
+                    "-maxrate", "2500k",
+                    "-bufsize", "5000k"
+                ])
+                
+            cmd.extend(transcode_args)
+            cmd.extend(["-f", "flv", full_rtmp_url])
             
     add_log(f"Launching FFmpeg streaming subprocess to {len(enabled_dests)} platforms...")
     
@@ -367,8 +401,9 @@ def start_stream(video_url, destinations, quality="copy"):
     try:
         active_process = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
+            text=True,
             startupinfo=startupinfo
         )
     except Exception as e:

@@ -77,7 +77,13 @@ class SettingsManager:
         # Dynamically sync from GitHub in real-time if enabled
         if self.config.get("settings", {}).get("github_backup", {}).get("enabled"):
             self.sync_from_github()
+            
+        fresh_config = self._load_local()
         with self.lock:
+            # Preserve active stream state that we track in memory
+            if "active_stream" in self.config:
+                fresh_config["active_stream"] = self.config["active_stream"]
+            self.config = fresh_config
             return self.config
 
     def save(self):
