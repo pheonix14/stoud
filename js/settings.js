@@ -70,7 +70,9 @@ async function loadConfig() {
         document.getElementById("break-video").value = s.break_video_url || "";
         document.getElementById("break-image").value = s.break_image_url || "";
         document.getElementById("intro-video").value = s.intro_video_url || "";
+        document.getElementById("intro-enabled").checked = s.intro_enabled !== false;
         document.getElementById("ending-video").value = s.ending_video_url || "";
+        document.getElementById("outro-enabled").checked = s.outro_enabled !== false;
         
         // GitHub configurations
         const gh = s.github_backup || {};
@@ -235,7 +237,9 @@ async function saveAllSettings() {
     const break_mode = document.getElementById("break-mode").checked;
     const break_video_url = document.getElementById("break-video").value.trim();
     const break_image_url = document.getElementById("break-image").value.trim();
+    const intro_enabled = document.getElementById("intro-enabled").checked;
     const intro_video_url = document.getElementById("intro-video").value.trim();
+    const outro_enabled = document.getElementById("outro-enabled").checked;
     const ending_video_url = document.getElementById("ending-video").value.trim();
     
     // GitHub Configurations
@@ -254,7 +258,9 @@ async function saveAllSettings() {
         break_mode,
         break_video_url,
         break_image_url,
+        intro_enabled,
         intro_video_url,
+        outro_enabled,
         ending_video_url,
         github_backup: {
             enabled: git_enabled,

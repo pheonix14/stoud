@@ -260,6 +260,19 @@ async function initDashboard() {
         introSel.value = settings.intro_video_url || "";
         outroSel.value = settings.ending_video_url || "";
         breakSel.value = settings.break_video_url || "";
+        
+        // Set initial toggles
+        document.getElementById("dashboard-intro-enabled").checked = settings.intro_enabled !== false;
+        document.getElementById("dashboard-outro-enabled").checked = settings.outro_enabled !== false;
+        
+        const breakBtn = document.getElementById("btn-dashboard-break");
+        if (settings.break_mode) {
+            breakBtn.innerText = "Break Mode: ON";
+            breakBtn.className = "btn btn-primary";
+        } else {
+            breakBtn.innerText = "Break Mode: OFF";
+            breakBtn.className = "btn btn-secondary";
+        }
 
         // 3. Load Schedules List
         renderHomeSchedules(config.schedules || []);
@@ -309,6 +322,8 @@ async function saveLauncherAddons() {
         config.settings.intro_video_url = introVal;
         config.settings.ending_video_url = outroVal;
         config.settings.break_video_url = breakVal;
+        config.settings.intro_enabled = document.getElementById("dashboard-intro-enabled").checked;
+        config.settings.outro_enabled = document.getElementById("dashboard-outro-enabled").checked;
         
         await fetch("/api/settings", {
             method: "POST",
@@ -317,6 +332,44 @@ async function saveLauncherAddons() {
         });
     } catch (e) {
         console.error("Failed to sync launcher addon selections to settings:", e);
+    }
+}
+
+async function toggleDashboardIntro() {
+    await saveLauncherAddons();
+}
+
+async function toggleDashboardOutro() {
+    await saveLauncherAddons();
+}
+
+async function toggleDashboardBreakMode() {
+    try {
+        const confResp = await fetch("/api/config");
+        const config = await confResp.json();
+        const settings = config.settings || {};
+        
+        const newVal = !settings.break_mode;
+        settings.break_mode = newVal;
+        
+        await fetch("/api/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(settings)
+        });
+        
+        const btn = document.getElementById("btn-dashboard-break");
+        if (newVal) {
+            btn.innerText = "Break Mode: ON";
+            btn.className = "btn btn-primary";
+            showToast("Break Mode enabled. If a break folder/video is set, it will start shortly.", "success");
+        } else {
+            btn.innerText = "Break Mode: OFF";
+            btn.className = "btn btn-secondary";
+            showToast("Break Mode disabled. Returning to normal queue.");
+        }
+    } catch (e) {
+        showToast("Error toggling break mode.", "danger");
     }
 }
 

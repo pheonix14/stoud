@@ -95,6 +95,9 @@ def runner_loop():
             
             break_mode = settings.get("break_mode", False)
             break_video_url = settings.get("break_video_url", "")
+            break_image_url = settings.get("break_image_url", "")
+            intro_enabled = settings.get("intro_enabled", True)
+            outro_enabled = settings.get("outro_enabled", True)
             intro_url = settings.get("intro_video_url", "")
             ending_url = settings.get("ending_video_url", "")
             
@@ -113,19 +116,20 @@ def runner_loop():
                 
                 # Check A: If Break Mode is active, stream break content on a loop
                 if break_mode:
-                    if break_video_url:
+                    break_media = player.get_media_from_path(break_video_url) or player.get_media_from_path(break_image_url)
+                    if break_media:
                         try:
-                            player.add_log(f"Watchdog: Break Mode is Active. Starting Break Stream: {break_video_url}")
-                            player.start_stream(break_video_url, destinations, quality, budget_mode=budget_mode)
+                            player.add_log(f"Watchdog: Break Mode is Active. Starting Break Stream: {break_media}")
+                            player.start_stream(break_media, destinations, quality, budget_mode=budget_mode)
                             settings_mgr.update_active_stream({
                                 "status": "streaming",
-                                "current_video": {"title": "Break Stream", "url": break_video_url},
+                                "current_video": {"title": "Break Stream", "url": break_media},
                                 "start_time": time.time()
                             })
                         except Exception as e:
                             player.add_log(f"Watchdog: Failed to start break stream: {e}")
                     else:
-                        player.add_log("Watchdog: Break Mode is Active, but Break Video URL is not configured.")
+                        player.add_log("Watchdog: Break Mode is Active, but Break Video/Image URL is not configured or empty.")
                         
                 # Check B: Play next item in queue if queue has items and break_mode is false
                 elif current_queue:
@@ -201,8 +205,10 @@ def runner_loop():
                             items_to_queue = []
                             
                             # A: If Intro URL is configured, prepend it
-                            if intro_url:
-                                items_to_queue.append({"url": intro_url, "title": "Intro Presentation"})
+                            if intro_enabled and intro_url:
+                                intro_media = player.get_media_from_path(intro_url)
+                                if intro_media:
+                                    items_to_queue.append({"url": intro_media, "title": "Intro Presentation"})
                                 
                             # B: Add the main schedule target content
                             if target_url.startswith("playlist:"):
@@ -223,8 +229,10 @@ def runner_loop():
                                 player.add_log(f"Triggered video schedule '{s.get('name')}'")
                                 
                             # C: If Ending URL is configured, append it
-                            if ending_url:
-                                items_to_queue.append({"url": ending_url, "title": "Ending Credits"})
+                            if outro_enabled and ending_url:
+                                outro_media = player.get_media_from_path(ending_url)
+                                if outro_media:
+                                    items_to_queue.append({"url": outro_media, "title": "Ending Credits"})
                                 
                             # Set current queue
                             current_queue = items_to_queue

@@ -128,24 +128,49 @@ def api_start_stream():
     try:
         budget_mode_flag = locals().get("budget_mode", False)
         
+        intro_enabled = settings.get("intro_enabled", True)
+        outro_enabled = settings.get("outro_enabled", True)
+        intro_url = settings.get("intro_video_url", "")
+        ending_url = settings.get("ending_video_url", "")
+        
+        target_items = []
         if "list=" in url or "playlist" in url:
             items = player.extract_playlist_items(url)
             if not items:
                 return jsonify({"success": False, "error": "Playlist is empty or invalid."}), 400
-            
-            first_item = items.pop(0)
-            url = first_item["url"]
-            runner.current_queue = items
+            target_items = items
         else:
-            runner.current_queue = []
+            target_items = [{"url": url, "title": "Main Stream Video"}]
             
+        final_queue = []
+        
+        # A: Prep Intro
+        if intro_enabled and intro_url:
+            intro_media = player.get_media_from_path(intro_url)
+            if intro_media:
+                final_queue.append({"url": intro_media, "title": "Intro Presentation"})
+                
+        # B: Add Target items
+        final_queue.extend(target_items)
+        
+        # C: Add Outro
+        if outro_enabled and ending_url:
+            outro_media = player.get_media_from_path(ending_url)
+            if outro_media:
+                final_queue.append({"url": outro_media, "title": "Ending Credits"})
+                
+        # Pop first item to start immediately
+        first_item = final_queue.pop(0)
+        url_to_start = first_item["url"]
+        
+        runner.current_queue = final_queue
         runner.active_schedule_id = None
         
-        info = player.start_stream(url, destinations, quality, budget_mode=budget_mode_flag)
+        info = player.start_stream(url_to_start, destinations, quality, budget_mode=budget_mode_flag)
         
         settings_mgr.update_active_stream({
             "status": "streaming",
-            "current_video": {"title": info.get("title"), "url": url},
+            "current_video": {"title": first_item.get("title", info.get("title")), "url": url_to_start},
             "start_time": info.get("start_time")
         })
         return jsonify({"success": True, "stream": info})

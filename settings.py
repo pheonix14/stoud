@@ -50,8 +50,10 @@ class SettingsManager:
                 "auto_ping_url": "",
                 "break_video_url": "",
                 "break_image_url": "",
-                "break_mode": false,
+                "break_mode": False,
+                "intro_enabled": True,
                 "intro_video_url": "",
+                "outro_enabled": True,
                 "ending_video_url": ""
             },
             "schedules": [],

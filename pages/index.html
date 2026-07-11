@@ -54,7 +54,7 @@
             </li>
         </ul>
         <div class="sidebar-footer">
-            Stoud v3.0.0
+            Stoud v3.2.0
         </div>
     </div>
 
@@ -159,9 +159,12 @@
                                     <option value="transcode">Transcode (H264/AAC, high compatibility)</option>
                                 </select>
                             </div>
-                            <div style="display: flex; align-items: flex-end; gap: 0.5rem;">
+                            <div style="display: flex; align-items: flex-end; gap: 0.5rem; flex-wrap: wrap;">
                                 <button class="btn btn-secondary" onclick="toggleLoopCurrentVideo()" id="btn-loop-current" style="height: 43px; flex-grow: 1;">
                                     Loop Video: OFF
+                                </button>
+                                <button class="btn btn-secondary" onclick="toggleDashboardBreakMode()" id="btn-dashboard-break" style="height: 43px; flex-grow: 1;">
+                                    Break Mode: OFF
                                 </button>
                             </div>
                         </div>
@@ -169,14 +172,20 @@
                         <!-- Intro, Ending & Break Selections -->
                         <div class="form-row" style="background: rgba(255,255,255,0.01); padding: 0.75rem; border-radius: 10px; border: 1px solid var(--glass-border);">
                             <div class="form-group">
-                                <label for="intro-selector">Intro Video</label>
+                                <label for="intro-selector">
+                                    <input type="checkbox" id="dashboard-intro-enabled" onchange="toggleDashboardIntro()" style="margin-right: 4px;">
+                                    Intro Video / Folder
+                                </label>
                                 <select id="intro-selector" class="form-control" onchange="saveLauncherAddons()">
                                     <option value="">-- None --</option>
                                     <!-- Populated dynamically -->
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="outro-selector">Ending Outro</label>
+                                <label for="outro-selector">
+                                    <input type="checkbox" id="dashboard-outro-enabled" onchange="toggleDashboardOutro()" style="margin-right: 4px;">
+                                    Ending Outro / Folder
+                                </label>
                                 <select id="outro-selector" class="form-control" onchange="saveLauncherAddons()">
                                     <option value="">-- None --</option>
                                     <!-- Populated dynamically -->

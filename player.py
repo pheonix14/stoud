@@ -144,6 +144,31 @@ def add_log(message):
     if len(log_messages) > 300:
         log_messages.pop(0)
 
+def get_media_from_path(path):
+    if not path:
+        return ""
+    if path.startswith("http://") or path.startswith("https://") or path.startswith("rtmp://"):
+        return path
+    
+    # Check if it's a local directory
+    if os.path.isdir(path):
+        valid_exts = {".mp4", ".mkv", ".mov", ".avi", ".jpg", ".jpeg", ".png"}
+        files = []
+        for f in os.listdir(path):
+            if any(f.lower().endswith(ext) for ext in valid_exts):
+                files.append(os.path.join(path, f))
+        
+        if files:
+            import random
+            selected = random.choice(files)
+            add_log(f"Selected media '{os.path.basename(selected)}' from folder '{path}'")
+            return selected
+        else:
+            add_log(f"No valid media files found in folder: {path}")
+            return ""
+            
+    return path
+
 def extract_playlist_items(url):
     import yt_dlp
     add_log(f"Extracting playlist items for: {url}")
@@ -335,7 +360,12 @@ def start_stream(video_url, destinations, quality="copy", budget_mode=False):
     if budget_mode:
         cmd.extend(["-threads", "1"])
     
+    is_image = video_input.lower().endswith(('.jpg', '.jpeg', '.png'))
+    
     # Add input
+    if is_image:
+        cmd.extend(["-loop", "1", "-framerate", "30"])
+    
     cmd.extend(["-i", video_input])
     if audio_input:
         cmd.extend(["-re", "-i", audio_input])
