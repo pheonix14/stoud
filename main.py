@@ -1,6 +1,7 @@
 import os
 import uuid
 import time
+import gc
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 from settings import SettingsManager
@@ -13,8 +14,12 @@ settings_mgr = SettingsManager()
 UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+# Limit max content length to 60MB to protect Render ephemeral disk
+app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 
-# Routing static assets directly
+# ============================================================
+# STATIC ASSET & HTML PAGE ROUTES
+# ============================================================
 @app.route('/css/<path:filename>')
 def serve_css(filename):
     return send_from_directory('css', filename)
@@ -27,7 +32,6 @@ def serve_js(filename):
 def serve_uploads(filename):
     return send_from_directory('uploads', filename)
 
-# HTML Page Routes
 @app.route('/')
 def index_route():
     return render_template('index.html')
@@ -49,22 +53,39 @@ def settings_route():
     return render_template('settings.html')
 
 
+# ============================================================
 # REST API ENDPOINTS
+# ============================================================
 
 # 1. Player Status & Health
 @app.route('/api/status', methods=['GET'])
 def get_status():
     status = player.get_live_status()
-    # Add active queue info
     status["queue"] = [item for item in runner.current_queue]
     status["active_schedule_id"] = runner.active_schedule_id
-    # Add loop settings to status
     config = settings_mgr.get_config()
-    status["loop_current_video"] = config.get("settings", {}).get("loop_current_video", False)
-    status["break_mode"] = config.get("settings", {}).get("break_mode", False)
+    settings = config.get("settings", {})
+    status["loop_current_video"] = settings.get("loop_current_video", False)
+    status["break_mode"] = settings.get("break_mode", False)
+    status["budget_mode"] = settings.get("budget_mode", True)
+    status["auto_shard_drive"] = settings.get("auto_shard_drive", True)
+    status["shard_duration_minutes"] = settings.get("shard_duration_minutes", 30)
     return jsonify(status)
 
-# 2. File Uploads (Intro, Ending, Break Content)
+# 2. Media Inspection (for 50GB file detection & auto-shard suggestions)
+@app.route('/api/media/inspect', methods=['POST'])
+def api_inspect_media():
+    data = request.json or {}
+    url = data.get("url")
+    if not url:
+        return jsonify({"success": False, "error": "URL parameter is required"}), 400
+    try:
+        info = player.inspect_media(url)
+        return jsonify({"success": True, "info": info})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# 3. File Uploads (Protected for Render free disk)
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -75,33 +96,44 @@ def upload_file():
         
     if file:
         filename = secure_filename(file.filename)
-        # Check size to prevent exceeding 300MB disk limit
         file.seek(0, os.SEEK_END)
         size = file.tell()
         file.seek(0)
         
-        # Limit local upload size to 60MB (Warning warning but allow if space permits)
         if size > 60 * 1024 * 1024:
-            return jsonify({"success": False, "error": "File size exceeds 60MB limit. To respect the 300MB disk space, use remote YouTube or Google Drive URLs instead!"}), 400
+            return jsonify({"success": False, "error": "File exceeds 60MB limit. For large or 50GB files, paste a Google Drive link!"}), 400
+            
+        disk_mb = player.get_available_disk_mb()
+        file_mb = size // (1024 * 1024)
+        if file_mb > disk_mb - 50:
+            return jsonify({"success": False, "error": f"Insufficient disk space ({disk_mb}MB free)."}), 400
             
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
-        
-        # Return public URL path
-        url_path = f"/uploads/{filename}"
-        return jsonify({"success": True, "url": url_path, "filename": filename})
+        return jsonify({"success": True, "url": f"/uploads/{filename}", "filename": filename})
 
-# 3. Stream Controls
+# 4. Stream Controls (With 50GB Google Drive Sharding Support)
 @app.route('/api/stream/start', methods=['POST'])
 def api_start_stream():
     data = request.json or {}
     url = data.get("url")
     quality = data.get("quality", "copy")
+    custom_rtmp = data.get("rtmp_url")
+    force_shard = data.get("shard", None)
+    shard_mins = data.get("shard_minutes", None)
     
     if not url:
         return jsonify({"success": False, "error": "URL parameter is required"}), 400
         
-    custom_rtmp = data.get("rtmp_url")
+    config = settings_mgr.get_config()
+    settings = config.get("settings", {})
+    budget_mode = settings.get("budget_mode", True)
+    
+    if shard_mins is None:
+        shard_mins = settings.get("shard_duration_minutes", 30)
+    else:
+        shard_mins = int(shard_mins)
+        
     if custom_rtmp:
         destinations = [{
             "id": "custom",
@@ -111,69 +143,105 @@ def api_start_stream():
             "enabled": True
         }]
     else:
-        config = settings_mgr.get_config()
-        settings = config.get("settings", {})
         destinations = settings.get("destinations", [])
-        budget_mode = settings.get("budget_mode", False)
         
     enabled_dests = [d for d in destinations if d.get("enabled")]
-    
     if not enabled_dests:
-        return jsonify({"success": False, "error": "No stream destinations configured. Set platforms in Settings or paste a direct RTMP link."}), 400
+        return jsonify({"success": False, "error": "No stream destinations enabled. Configure in Settings or enter direct RTMP link."}), 400
         
     for d in enabled_dests:
         if d.get("rtmp_url") == "rtmp://a.rtmp.youtube.com/live2" and not d.get("stream_key"):
-            return jsonify({"success": False, "error": f"Stream key is missing for destination '{d.get('name')}'. Please configure it in Settings."}), 400
+            return jsonify({"success": False, "error": f"Stream key missing for '{d.get('name')}'. Configure it in Settings."}), 400
             
+    gc.collect()
+    
     try:
-        budget_mode_flag = locals().get("budget_mode", False)
+        # Determine whether to use sharded queue
+        is_gdrive = "drive.google.com" in url
+        auto_shard_setting = settings.get("auto_shard_drive", True)
+        use_sharding = force_shard if force_shard is not None else (is_gdrive and auto_shard_setting)
         
-        intro_enabled = settings.get("intro_enabled", True)
-        outro_enabled = settings.get("outro_enabled", True)
-        intro_url = settings.get("intro_video_url", "")
-        ending_url = settings.get("ending_video_url", "")
-        
-        target_items = []
+        # A: YouTube Playlist
         if "list=" in url or "playlist" in url:
             items = player.extract_playlist_items(url)
             if not items:
                 return jsonify({"success": False, "error": "Playlist is empty or invalid."}), 400
-            target_items = items
-        else:
-            target_items = [{"url": url, "title": "Main Stream Video"}]
+            first_item = items.pop(0)
+            runner.current_queue = items
+            runner.active_schedule_id = None
+            info = player.start_stream(first_item["url"], enabled_dests, quality, budget_mode=budget_mode)
+            settings_mgr.update_active_stream({
+                "status": "streaming",
+                "current_video": {"title": first_item.get("title", info.get("title")), "url": first_item["url"]},
+                "start_time": info.get("start_time")
+            })
+            return jsonify({"success": True, "stream": info, "sharded": False})
             
-        final_queue = []
+        # B: Google Drive 50GB / Large File Sharding Mode
+        if use_sharding:
+            player.add_log(f"[Sharder] Triggering Sharded Stream Pipeline ({shard_mins}m per shard)...")
+            runner.current_queue = []
+            success, shard_count = runner.add_sharded_to_queue(url, data.get("title", "Google Drive Video"), shard_duration_minutes=shard_mins)
+            
+            if runner.current_queue:
+                first_item = runner.current_queue.pop(0)
+                shard_info = {
+                    "index": first_item.get("shard_index", 1),
+                    "total": first_item.get("shard_total", shard_count)
+                }
+                info = player.start_stream(
+                    first_item["url"],
+                    enabled_dests,
+                    quality,
+                    budget_mode=budget_mode,
+                    start_offset=first_item.get("start_offset", 0),
+                    duration=first_item.get("duration"),
+                    shard_info=shard_info
+                )
+                settings_mgr.update_active_stream({
+                    "status": "streaming",
+                    "current_video": {"title": first_item.get("title"), "url": first_item["url"]},
+                    "start_time": info.get("start_time")
+                })
+                return jsonify({
+                    "success": True,
+                    "stream": info,
+                    "sharded": True,
+                    "total_shards": shard_count,
+                    "message": f"Successfully launched Shard 1 of {shard_count}. Remaining shards are queued."
+                })
+                
+        # C: Standard Single Stream
+        intro_enabled = settings.get("intro_enabled", False)
+        outro_enabled = settings.get("outro_enabled", False)
+        intro_url = settings.get("intro_video_url", "")
+        ending_url = settings.get("ending_video_url", "")
         
-        # A: Prep Intro
+        final_queue = []
         if intro_enabled and intro_url:
             intro_media = player.get_media_from_path(intro_url)
             if intro_media:
                 final_queue.append({"url": intro_media, "title": "Intro Presentation"})
                 
-        # B: Add Target items
-        final_queue.extend(target_items)
+        final_queue.append({"url": url, "title": data.get("title", "Main Stream Video")})
         
-        # C: Add Outro
         if outro_enabled and ending_url:
             outro_media = player.get_media_from_path(ending_url)
             if outro_media:
                 final_queue.append({"url": outro_media, "title": "Ending Credits"})
                 
-        # Pop first item to start immediately
         first_item = final_queue.pop(0)
-        url_to_start = first_item["url"]
-        
         runner.current_queue = final_queue
         runner.active_schedule_id = None
         
-        info = player.start_stream(url_to_start, destinations, quality, budget_mode=budget_mode_flag)
-        
+        info = player.start_stream(first_item["url"], enabled_dests, quality, budget_mode=budget_mode)
         settings_mgr.update_active_stream({
             "status": "streaming",
-            "current_video": {"title": first_item.get("title", info.get("title")), "url": url_to_start},
+            "current_video": {"title": first_item.get("title", info.get("title")), "url": first_item["url"]},
             "start_time": info.get("start_time")
         })
-        return jsonify({"success": True, "stream": info})
+        return jsonify({"success": True, "stream": info, "sharded": False})
+        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -182,7 +250,7 @@ def api_stop_stream():
     runner.current_queue = []
     runner.active_schedule_id = None
     success = player.stop_stream()
-    
+    gc.collect()
     settings_mgr.update_active_stream({
         "status": "idle",
         "current_video": None,
@@ -190,18 +258,33 @@ def api_stop_stream():
     })
     return jsonify({"success": success})
 
-# 4. Live Queue Management
+# 5. Live Queue Management
 @app.route('/api/queue/add', methods=['POST'])
 def api_add_queue():
     data = request.json or {}
     url = data.get("url")
     title = data.get("title", "Dynamic Queue Item")
+    auto_shard = data.get("auto_shard", None)
     
     if not url:
         return jsonify({"success": False, "error": "URL is required"}), 400
         
-    success = runner.add_to_queue(url, title)
+    success = runner.add_to_queue(url, title, auto_shard=auto_shard)
     return jsonify({"success": success})
+
+@app.route('/api/queue/shard_video', methods=['POST'])
+def api_shard_video_queue():
+    """Explicitly shard a video and add all shards to queue."""
+    data = request.json or {}
+    url = data.get("url")
+    title = data.get("title", "Sharded Video")
+    shard_mins = int(data.get("shard_minutes", 30))
+    
+    if not url:
+        return jsonify({"success": False, "error": "URL is required"}), 400
+        
+    success, count = runner.add_sharded_to_queue(url, title, shard_duration_minutes=shard_mins)
+    return jsonify({"success": success, "total_shards": count})
 
 @app.route('/api/queue/<int:idx>', methods=['DELETE'])
 def api_remove_queue(idx):
@@ -214,7 +297,7 @@ def api_clear_queue():
     player.add_log("Active playback queue cleared.")
     return jsonify({"success": True})
 
-# 5. Config & Settings
+# 6. Config & Settings
 @app.route('/api/config', methods=['GET'])
 def get_config():
     return jsonify(settings_mgr.get_config())
@@ -225,7 +308,7 @@ def api_update_settings():
     success = settings_mgr.update_settings(data)
     return jsonify({"success": success})
 
-# 6. Schedule Endpoints (with "Run Now" support)
+# 7. Schedule Endpoints
 @app.route('/api/schedules', methods=['GET'])
 def get_schedules():
     return jsonify(settings_mgr.get_schedules())
@@ -247,7 +330,6 @@ def add_schedule():
         "time": time_str,
         "status": "scheduled"
     }
-    
     success = settings_mgr.add_schedule(new_schedule)
     return jsonify({"success": success, "schedule": new_schedule})
 
@@ -268,38 +350,21 @@ def run_schedule_now(schedule_id):
     if player.active_process is not None:
         return jsonify({"success": False, "error": "Cannot stream now: another stream is active."}), 400
         
-    # Trigger it immediately by overriding its schedule time and setting it running
     runner.active_schedule_id = schedule_id
     settings_mgr.update_schedule_status(schedule_id, "running")
     target_url = schedule.get("url")
     
     settings = config.get("settings", {})
-    intro_url = settings.get("intro_video_url", "")
-    ending_url = settings.get("ending_video_url", "")
-    
-    items_to_queue = []
-    if intro_url:
-        items_to_queue.append({"url": intro_url, "title": "Intro Presentation"})
-        
-    if target_url.startswith("playlist:"):
-        playlist_id = target_url.split(":")[1]
-        playlists = config.get("playlists", [])
-        playlist = next((p for p in playlists if p.get("id") == playlist_id), None)
-        if playlist and playlist.get("items"):
-            items_to_queue.extend(playlist.get("items"))
-        else:
-            return jsonify({"success": False, "error": "Playlist not found or empty."}), 400
+    if settings.get("auto_shard_drive", True) and "drive.google.com" in target_url:
+        runner.current_queue = []
+        runner.add_sharded_to_queue(target_url, schedule.get("name"), shard_duration_minutes=settings.get("shard_duration_minutes", 30))
     else:
-        items_to_queue.append({"url": target_url, "title": schedule.get("name")})
+        runner.current_queue = [{"url": target_url, "title": schedule.get("name")}]
         
-    if ending_url:
-        items_to_queue.append({"url": ending_url, "title": "Ending Credits"})
-        
-    runner.current_queue = items_to_queue
     player.add_log(f"Manual override: Initiated schedule '{schedule.get('name')}' immediately.")
     return jsonify({"success": True})
 
-# 7. Playlist Endpoints
+# 8. Playlists & Saved
 @app.route('/api/playlists', methods=['GET'])
 def get_playlists():
     return jsonify(settings_mgr.get_playlists())
@@ -320,7 +385,6 @@ def add_playlist():
     else:
         playlist = {"id": str(uuid.uuid4()), "name": name, "items": items}
         success = settings_mgr.add_playlist(playlist)
-        
     return jsonify({"success": success, "playlist": playlist})
 
 @app.route('/api/playlists/<playlist_id>', methods=['DELETE'])
@@ -328,7 +392,6 @@ def delete_playlist(playlist_id):
     success = settings_mgr.delete_playlist(playlist_id)
     return jsonify({"success": success})
 
-# 8. Saved Videos
 @app.route('/api/saved', methods=['GET'])
 def get_saved():
     return jsonify(settings_mgr.get_saved_videos())
@@ -357,7 +420,7 @@ def delete_saved(video_id):
     success = settings_mgr.delete_saved_video(video_id)
     return jsonify({"success": success})
 
-# 9. FFmpeg Downloader
+# 9. FFmpeg Setup
 @app.route('/api/ffmpeg/download', methods=['POST'])
 def api_download_ffmpeg():
     status = player.get_ffmpeg_status()
@@ -366,18 +429,36 @@ def api_download_ffmpeg():
     player.download_ffmpeg_background()
     return jsonify({"success": True, "message": "Download started in background."})
 
-# App setup
+# 10. Render Free-Tier Health & Diagnostic Check
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    """Endpoint for Render health checks and uptime pingers."""
+    return jsonify({
+        "status": "healthy",
+        "app": "Stoud v3.4.0 (50GB Shard Edition)",
+        "ram_available_mb": player.get_available_memory_mb(),
+        "disk_available_mb": player.get_available_disk_mb(),
+        "is_streaming": player.active_process is not None,
+        "queue_length": len(runner.current_queue),
+        "is_sharded": player.active_stream_info.get("is_sharded", False),
+        "shard_info": player.active_stream_info.get("shard_info"),
+        "render_url": os.environ.get("RENDER_EXTERNAL_URL", "local")
+    })
+
+# ============================================================
+# APP INITIALIZATION
+# ============================================================
 def init_app():
     os.makedirs(os.path.join(os.getcwd(), "logs"), exist_ok=True)
     status = player.get_ffmpeg_status()
     if status == "Not Installed":
         player.download_ffmpeg_background()
 
+# Initialize immediately so Gunicorn starts runner automatically
+init_app()
+runner.start_runner()
+
 if __name__ == '__main__':
-    init_app()
-    # Start background tasks
-    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
-        runner.start_runner()
-        
-    print("Stoud v3 server running at http://127.0.0.1:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Stoud v3 running at http://0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)

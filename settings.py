@@ -21,12 +21,20 @@ class SettingsManager:
             return self._get_template_config()
         try:
             with open(self.filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                # Merge with default template so newly added fields always exist
+                defaults = self._get_template_config()
+                if "settings" in data:
+                    for k, v in defaults["settings"].items():
+                        if k not in data["settings"]:
+                            data["settings"][k] = v
+                return data
         except Exception as e:
             print(f"Error loading local config.json: {e}")
             return self._get_template_config()
 
     def _get_template_config(self):
+        render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
         return {
             "settings": {
                 "destinations": [
@@ -40,6 +48,9 @@ class SettingsManager:
                 ],
                 "quality": "copy",
                 "loop_current_video": False,
+                "budget_mode": True,  # Default to True for Render Free Tier
+                "auto_shard_drive": True,  # Auto-shard 50GB Drive files
+                "shard_duration_minutes": 30,  # 30-min shards optimal for Render 512MB RAM
                 "github_backup": {
                     "enabled": False,
                     "repo": "",
@@ -47,13 +58,13 @@ class SettingsManager:
                     "token": "",
                     "path": "stoud-config.json"
                 },
-                "auto_ping_url": "",
+                "auto_ping_url": render_url,
                 "break_video_url": "",
                 "break_image_url": "",
                 "break_mode": False,
-                "intro_enabled": True,
+                "intro_enabled": False,
                 "intro_video_url": "",
-                "outro_enabled": True,
+                "outro_enabled": False,
                 "ending_video_url": ""
             },
             "schedules": [],
@@ -61,7 +72,7 @@ class SettingsManager:
             "saved_videos": [
                 {
                     "id": "test-gdrive-video",
-                    "title": "Test GDrive Video",
+                    "title": "Test GDrive Video (50GB Ready)",
                     "url": "https://drive.google.com/file/d/1kGDTidwRBYEyXUmeuKmGnldu-k9wGtDu/view?usp=drive_link",
                     "type": "gdrive"
                 }
@@ -91,7 +102,7 @@ class SettingsManager:
     def save(self):
         with self.lock:
             try:
-                # Clear PID in saved file so it doesn't persist
+                # Clear PID in saved file so it doesn't persist across restarts
                 config_to_save = json.loads(json.dumps(self.config))
                 if "active_stream" in config_to_save:
                     config_to_save["active_stream"]["pid"] = None
@@ -120,7 +131,7 @@ class SettingsManager:
         headers = {
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "Stoud-v2-Backup-Client"
+            "User-Agent": "Stoud-v3-Backup-Client"
         }
 
         url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={branch}"
@@ -134,15 +145,12 @@ class SettingsManager:
                     remote_config = json.loads(config_str)
                     
                     with self.lock:
-                        # Keep current local active_stream pid so we don't drop active streaming status
                         current_active_stream = self.config.get("active_stream", {})
                         self.config = remote_config
                         if "active_stream" in self.config:
-                            # If remote says idle but we are streaming, keep our local stream status
                             if current_active_stream.get("status") == "streaming" and self.config["active_stream"].get("status") == "idle":
                                 self.config["active_stream"] = current_active_stream
                                 
-                    # Write to local file so it is persisted
                     with open(self.filepath, "w", encoding="utf-8") as f:
                         json.dump(remote_config, f, indent=2)
                     print("GitHub Data Sync: Successfully pulled configuration from GitHub.")
@@ -164,10 +172,9 @@ class SettingsManager:
         headers = {
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "Stoud-v2-Backup-Client"
+            "User-Agent": "Stoud-v3-Backup-Client"
         }
 
-        # 1. Get SHA of file if exists
         sha = None
         url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={branch}"
         req = urllib.request.Request(url, headers=headers, method="GET")
@@ -183,10 +190,8 @@ class SettingsManager:
             print(f"GitHub Backup: Error checking file SHA: {str(e)}")
             return
 
-        # 2. Put updated content
         put_url = f"https://api.github.com/repos/{repo}/contents/{path}"
         with self.lock:
-            # Clean pid for backup copy
             clean_config = json.loads(json.dumps(self.config))
             if "active_stream" in clean_config:
                 clean_config["active_stream"]["pid"] = None
@@ -196,7 +201,7 @@ class SettingsManager:
         content_b64 = base64.b64encode(config_bytes).decode('utf-8')
         
         payload = {
-            "message": "Auto-update config from Stoud v2",
+            "message": "Auto-update config from Stoud v3",
             "content": content_b64,
             "branch": branch
         }
