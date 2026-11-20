@@ -87,11 +87,16 @@ function setupUrlInspector() {
         const helper = document.getElementById("drive-shard-helper");
         const shardBtn = document.getElementById("btn-shard-queue");
 
-        if (url.includes("drive.google.com")) {
+        const isDrive = url.includes("drive.google.com");
+        const isYoutube = (url.includes("youtube.com") || url.includes("youtu.be")) && !url.includes("list=") && !url.includes("playlist");
+
+        if (isDrive || isYoutube) {
             helper.style.display = "block";
             shardBtn.style.display = "block";
-            document.getElementById("drive-filesize-badge").innerText = "Probing Size...";
-            document.getElementById("drive-helper-text").innerText = "Inspecting Google Drive video headers for optimal sharded plan...";
+            document.getElementById("drive-filesize-badge").innerText = isYoutube ? "Probing YouTube..." : "Probing Size...";
+            document.getElementById("drive-helper-text").innerText = isYoutube
+                ? "Inspecting YouTube video stream (unlisted/public) for sharded playback..."
+                : "Inspecting Google Drive video headers for optimal sharded plan...";
 
             inspectDebounceTimer = setTimeout(async () => {
                 try {
@@ -103,14 +108,14 @@ function setupUrlInspector() {
                     const res = await resp.json();
                     if (res.success && res.info) {
                         const info = res.info;
-                        const sizeStr = info.filesize_gb ? `${info.filesize_gb} GB` : "Large Drive File";
+                        const sizeStr = info.filesize_gb ? `${info.filesize_gb} GB` : (isYoutube ? (info.duration_formatted || "YouTube Stream") : "Large Drive File");
                         document.getElementById("drive-filesize-badge").innerText = sizeStr;
                         
                         let text = `Detected "${info.title}". `;
                         if (info.filesize_gb && info.filesize_gb >= 10) {
                             text += `🔥 Massive ${info.filesize_gb} GB file detected! Sharding will stream 30-min segments to preserve Render's 512MB RAM & refresh tokens.`;
                         } else if (info.duration_formatted && info.duration_formatted !== "Unknown") {
-                            text += `Duration: ${info.duration_formatted}. Recommended: ${info.recommended_shards} shards.`;
+                            text += `Duration: ${info.duration_formatted}. Recommended: ${info.recommended_shards} shard(s). Zero-disk direct stream active.`;
                         } else {
                             text += `HTTP Range sharding is active for zero disk usage on Render free tier.`;
                         }

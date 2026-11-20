@@ -163,17 +163,17 @@
                             <input type="text" id="stream-url" class="form-control" placeholder="https://drive.google.com/file/d/... or YouTube link">
                         </div>
 
-                        <!-- 50GB Google Drive Sharding Helper Card (Appears dynamically) -->
+                        <!-- 50GB Google Drive & YouTube Sharding Helper Card (Appears dynamically) -->
                         <div id="drive-shard-helper" style="display: none; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 10px; padding: 0.85rem;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
                                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                                     <span style="font-size: 1rem;">⚡</span>
-                                    <strong style="color: #93c5fd; font-size: 0.9rem;">Google Drive Shard Engine</strong>
+                                    <strong style="color: #93c5fd; font-size: 0.9rem;">Auto-Shard Engine (Google Drive & YouTube)</strong>
                                 </div>
-                                <span id="drive-filesize-badge" class="video-badge gdrive" style="font-size: 0.75rem;">Probing Size...</span>
+                                <span id="drive-filesize-badge" class="video-badge gdrive" style="font-size: 0.75rem;">Probing...</span>
                             </div>
                             <p id="drive-helper-text" style="color: var(--text-secondary); font-size: 0.8rem; margin: 0 0 0.75rem 0;">
-                                Large files stream directly via HTTP Range requests without downloading to Render's disk.
+                                Large files & YouTube streams stream directly via HTTP Range requests without downloading to Render's disk.
                             </p>
                             <div class="form-row" style="align-items: center;">
                                 <div style="display: flex; align-items: center; gap: 0.5rem;">

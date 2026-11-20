@@ -456,11 +456,12 @@ def extract_playlist_items(url):
 
 def resolve_youtube_url(url):
     import yt_dlp
-    add_log(f"Resolving YouTube URL: {url}")
+    add_log(f"Resolving YouTube URL (Public/Unlisted): {url}")
     ydl_opts = {
-        'format': 'bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]/best',
+        'format': 'bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[acodec^=mp4a]/bestvideo[vcodec^=avc1]+bestaudio/best[vcodec^=avc1]/bestvideo+bestaudio/best',
         'quiet': True,
         'no_warnings': True,
+        'noplaylist': True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:

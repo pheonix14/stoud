@@ -52,10 +52,11 @@ def add_sharded_to_queue(url, title, shard_duration_minutes=30):
             start_str = time.strftime('%H:%M:%S', time.gmtime(offset))
             end_str = time.strftime('%H:%M:%S', time.gmtime(offset + dur))
             
+            video_type = "youtube" if ("youtube.com" in url or "youtu.be" in url) else ("gdrive" if "drive.google.com" in url else "direct")
             shard_item = {
                 "url": url,
                 "title": f"[Shard {i+1}/{total_shards}] {video_title} ({start_str} - {end_str})",
-                "type": "gdrive" if "drive.google.com" in url else "direct",
+                "type": video_type,
                 "start_offset": offset,
                 "duration": dur,
                 "shard_index": i + 1,
@@ -97,15 +98,18 @@ def add_to_queue(url, title, auto_shard=None):
             player.add_log(f"Failed to add playlist to queue: {str(e)}")
             return False
             
-    # Check settings for auto-sharding Drive files
+    # Check settings for auto-sharding Drive & long YouTube files
     settings_mgr = SettingsManager()
     cfg = settings_mgr.get_config().get("settings", {})
     should_shard = auto_shard if auto_shard is not None else cfg.get("auto_shard_drive", True)
     shard_mins = cfg.get("shard_duration_minutes", 30)
     
-    if should_shard and "drive.google.com" in url:
-        success, _ = add_sharded_to_queue(url, title, shard_duration_minutes=shard_mins)
-        return success
+    is_streamable = ("drive.google.com" in url or "youtube.com" in url or "youtu.be" in url)
+    if should_shard and is_streamable:
+        info = player.inspect_media(url)
+        if (info.get("duration") and info.get("duration") > shard_mins * 60) or "drive.google.com" in url:
+            success, _ = add_sharded_to_queue(url, title, shard_duration_minutes=shard_mins)
+            return success
 
     video_type = "youtube" if ("youtube.com" in url or "youtu.be" in url) else ("gdrive" if "drive.google.com" in url else "direct")
     item = {"url": url, "title": title, "type": video_type}

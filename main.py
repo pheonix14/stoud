@@ -158,8 +158,21 @@ def api_start_stream():
     try:
         # Determine whether to use sharded queue
         is_gdrive = "drive.google.com" in url
+        is_youtube = ("youtube.com" in url or "youtu.be" in url) and ("list=" not in url and "playlist" not in url)
         auto_shard_setting = settings.get("auto_shard_drive", True)
-        use_sharding = force_shard if force_shard is not None else (is_gdrive and auto_shard_setting)
+        
+        if force_shard is not None:
+            use_sharding = force_shard
+        elif auto_shard_setting:
+            if is_gdrive:
+                use_sharding = True
+            elif is_youtube:
+                info = player.inspect_media(url)
+                use_sharding = bool(info.get("duration") and info.get("duration") > shard_mins * 60)
+            else:
+                use_sharding = False
+        else:
+            use_sharding = False
         
         # A: YouTube Playlist
         if "list=" in url or "playlist" in url:
@@ -177,11 +190,12 @@ def api_start_stream():
             })
             return jsonify({"success": True, "stream": info, "sharded": False})
             
-        # B: Google Drive 50GB / Large File Sharding Mode
+        # B: Google Drive 50GB or Long YouTube Video Sharding Mode
         if use_sharding:
-            player.add_log(f"[Sharder] Triggering Sharded Stream Pipeline ({shard_mins}m per shard)...")
+            media_label = "YouTube Video" if is_youtube else "Google Drive Video"
+            player.add_log(f"[Sharder] Triggering Sharded Stream Pipeline for {media_label} ({shard_mins}m per shard)...")
             runner.current_queue = []
-            success, shard_count = runner.add_sharded_to_queue(url, data.get("title", "Google Drive Video"), shard_duration_minutes=shard_mins)
+            success, shard_count = runner.add_sharded_to_queue(url, data.get("title", media_label), shard_duration_minutes=shard_mins)
             
             if runner.current_queue:
                 first_item = runner.current_queue.pop(0)
