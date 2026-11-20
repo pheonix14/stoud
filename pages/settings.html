@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stoud v3 - Stream Settings Panel</title>
+    <title>Stoud v3 - Settings (50GB Shard Edition)</title>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -54,7 +54,7 @@
             </li>
         </ul>
         <div class="sidebar-footer">
-            Stoud v3.0.0
+            Stoud v3.4.0 (Render Free Tier)
         </div>
     </div>
 
@@ -63,7 +63,7 @@
         <div class="header">
             <div class="page-title">
                 <h1>Settings Configuration</h1>
-                <p>Ingestion targets, watchdog pingers, media looping, and intro/break modules.</p>
+                <p>Google Drive 50GB sharding, Render free tier guard, multi-destinations & watchdog pinger.</p>
             </div>
         </div>
 
@@ -80,6 +80,44 @@
                 <button id="ffmpeg-btn" class="btn btn-secondary" onclick="downloadFFmpeg()" style="display: none;">
                     Download Standalone Windows Build
                 </button>
+            </div>
+        </div>
+
+        <!-- 50GB Google Drive & YouTube Sharding & Render Free Tier Guard -->
+        <div class="card" style="border: 1px solid rgba(59, 130, 246, 0.3);">
+            <div class="card-title" style="color: #93c5fd;">
+                <span>50GB Google Drive & YouTube Shard Engine (Render Free Tier Guard)</span>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.25rem;">
+                Optimized for Render's 512MB RAM and zero ephemeral disk caching. Streams huge 50GB Drive files and long YouTube videos (public or unlisted) directly via HTTP Range requests in sequential shards.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="checkbox" id="auto-shard-drive" style="width: 18px; height: 18px; cursor: pointer;">
+                    <label for="auto-shard-drive" style="font-weight: 500; cursor: pointer;">
+                        Auto-Shard Large Media (Google Drive 50GB & long YouTube videos with fresh streaming tokens per shard)
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="shard-duration-minutes">Default Shard Duration (Minutes)</label>
+                        <select id="shard-duration-minutes" class="form-control">
+                            <option value="15">15 Minutes</option>
+                            <option value="30" selected>30 Minutes (Optimal for Render 512MB RAM)</option>
+                            <option value="45">45 Minutes</option>
+                            <option value="60">60 Minutes</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="budget-mode">Render Free-Tier Budget Mode</label>
+                        <div style="display: flex; align-items: center; height: 42px; gap: 0.5rem;">
+                            <input type="checkbox" id="budget-mode" checked style="width: 18px; height: 18px; cursor: pointer;">
+                            <label for="budget-mode" style="font-size: 0.85rem; cursor: pointer; color: var(--text-secondary);">
+                                Enforce 1-thread, 512k buffer, strict 450MB RAM ceiling
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -109,7 +147,7 @@
             </div>
         </div>
 
-        <!-- Streaming Quality & Loop Controls -->
+        <!-- Streaming Quality & Keep-Alive Controls -->
         <div class="card">
             <div class="card-title">Streaming & Keep-Alive Options</div>
             <div style="display: flex; flex-direction: column; gap: 1.25rem;">
@@ -117,22 +155,21 @@
                     <div class="form-group">
                         <label for="default-quality">Default Streaming Method</label>
                         <select id="default-quality" class="form-control">
-                            <option value="copy">Direct Copy (Low CPU)</option>
-                            <option value="transcode">Transcode (High Compatibility)</option>
+                            <option value="copy" selected>Direct Copy (Low CPU & Zero RAM bloat - Recommended)</option>
+                            <option value="transcode">Transcode (Ultrafast H264, Render Budget Mode)</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="auto-ping-url">Watchdog Public Self-Pinger URL (e.g. Render App URL)</label>
-                        <input type="text" id="auto-ping-url" class="form-control" placeholder="https://stoud-v2.onrender.com/">
+                        <label for="auto-ping-url">Render Keep-Alive Pinger URL</label>
+                        <input type="text" id="auto-ping-url" class="form-control" placeholder="https://your-service.onrender.com (Auto-detected if empty)">
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; display: block;">
+                            Pings every 5 minutes to prevent Render free instance from sleeping.
+                        </span>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                     <input type="checkbox" id="loop-current-video" style="width: 18px; height: 18px; cursor: pointer;">
                     <label for="loop-current-video" style="font-weight: 500; cursor: pointer;">Enable "Loop Current Video" by default</label>
-                </div>
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <input type="checkbox" id="budget-mode" style="width: 18px; height: 18px; cursor: pointer;">
-                    <label for="budget-mode" style="font-weight: 500; cursor: pointer;">Enable "Budget Mode" (Low RAM/CPU optimized for Render/Heroku limits)</label>
                 </div>
             </div>
         </div>
@@ -141,7 +178,6 @@
         <div class="card">
             <div class="card-title">Intro, Ending & Break Presentation Content</div>
             <div style="display: flex; flex-direction: column; gap: 1.25rem;">
-                <!-- Break Mode Section -->
                 <div style="display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 1rem;">
                     <input type="checkbox" id="break-mode" style="width: 18px; height: 18px; cursor: pointer;" onchange="toggleBreakModeUI()">
                     <label for="break-mode" style="font-weight: 600; cursor: pointer;">Enable Break Mode Loop (Switches stream to Break Video/Image loop immediately)</label>
@@ -166,7 +202,6 @@
                     </div>
                 </div>
 
-                <!-- Intro / Ending selector -->
                 <div class="form-row" style="border-top: 1px solid var(--glass-border); padding-top: 1rem;">
                     <div class="form-group">
                         <label for="intro-video">
@@ -196,7 +231,7 @@
 
         <!-- GitHub config sync settings -->
         <div class="card">
-            <div class="card-title">GitHub Sync Data Sync (Real-time storage)</div>
+            <div class="card-title">GitHub Config Autosave Sync (Real-time storage)</div>
             <div style="display: flex; flex-direction: column; gap: 1.25rem;">
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                     <input type="checkbox" id="git-enabled" style="width: 18px; height: 18px; cursor: pointer;" onchange="toggleGitFields()">

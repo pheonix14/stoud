@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: stoud-live-streamer
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: STOUD_RAM_LIMIT_MB
+        value: 450
+      - key: STOUD_SHARD_DURATION
+        value: 1800
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: MALLOC_ARENA_MAX
+        value: 2
+      - key: WERKZEUG_RUN_MAIN
+        value: true

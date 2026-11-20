@@ -24,15 +24,13 @@ async function handleFileUpload(input, targetInputId) {
     if (input.files.length === 0) return;
     const file = input.files[0];
     
-    // Check local upload warning
     if (file.size > 60 * 1024 * 1024) {
-        showToast("File is too large! Maximum local upload is 60MB. Use remote links for large content.", "danger");
+        showToast("File is too large! Max local upload is 60MB. For 50GB files, use Google Drive!", "danger");
         input.value = "";
         return;
     }
     
     showToast(`Uploading ${file.name}...`);
-    
     const formData = new FormData();
     formData.append("file", file);
     
@@ -51,7 +49,7 @@ async function handleFileUpload(input, targetInputId) {
     } catch (err) {
         showToast("Error uploading file.", "danger");
     }
-    input.value = ""; // Reset
+    input.value = "";
 }
 
 async function loadConfig() {
@@ -63,16 +61,24 @@ async function loadConfig() {
         document.getElementById("default-quality").value = s.quality || "copy";
         document.getElementById("auto-ping-url").value = s.auto_ping_url || "";
         document.getElementById("loop-current-video").checked = s.loop_current_video || false;
-        document.getElementById("budget-mode").checked = s.budget_mode || false;
+        document.getElementById("budget-mode").checked = s.budget_mode !== false;
+        
+        // 50GB Drive Sharding settings
+        if (document.getElementById("auto-shard-drive")) {
+            document.getElementById("auto-shard-drive").checked = s.auto_shard_drive !== false;
+        }
+        if (document.getElementById("shard-duration-minutes")) {
+            document.getElementById("shard-duration-minutes").value = s.shard_duration_minutes || 30;
+        }
         
         // Break Mode configs
         document.getElementById("break-mode").checked = s.break_mode || false;
         document.getElementById("break-video").value = s.break_video_url || "";
         document.getElementById("break-image").value = s.break_image_url || "";
         document.getElementById("intro-video").value = s.intro_video_url || "";
-        document.getElementById("intro-enabled").checked = s.intro_enabled !== false;
+        document.getElementById("intro-enabled").checked = s.intro_enabled === true;
         document.getElementById("ending-video").value = s.ending_video_url || "";
-        document.getElementById("outro-enabled").checked = s.outro_enabled !== false;
+        document.getElementById("outro-enabled").checked = s.outro_enabled === true;
         
         // GitHub configurations
         const gh = s.github_backup || {};
@@ -84,10 +90,9 @@ async function loadConfig() {
         
         toggleGitFields();
         
-        // Load Ingestion Destinations
+        // Destinations
         destinationsList = s.destinations || [];
         renderDestinations();
-        
     } catch (err) {
         showToast("Failed to load configuration from backend.", "danger");
     }
@@ -132,9 +137,7 @@ function renderDestinations() {
 }
 
 function addNewDestinationRow() {
-    // Read current input values first to preserve edits
     syncDestinationsFromDOM();
-    
     destinationsList.push({
         id: "dest-" + Date.now(),
         name: "",
@@ -154,7 +157,6 @@ function deleteDestinationRow(index) {
 function syncDestinationsFromDOM() {
     const tbody = document.getElementById("destinations-tbody");
     const rows = tbody.querySelectorAll("tr");
-    
     if (rows.length === 0 || destinationsList.length === 0) return;
     
     rows.forEach((tr, index) => {
@@ -177,9 +179,7 @@ function toggleGitFields() {
     document.getElementById("git-fields-container").style.display = enabled ? "flex" : "none";
 }
 
-function toggleBreakModeUI() {
-    // Optional highlight
-}
+function toggleBreakModeUI() {}
 
 async function checkFFmpegStatus() {
     try {
@@ -233,7 +233,10 @@ async function saveAllSettings() {
     const loop_current_video = document.getElementById("loop-current-video").checked;
     const budget_mode = document.getElementById("budget-mode").checked;
     
-    // Break mode configurations
+    const auto_shard_drive = document.getElementById("auto-shard-drive") ? document.getElementById("auto-shard-drive").checked : true;
+    const shard_duration_minutes = document.getElementById("shard-duration-minutes") ? parseInt(document.getElementById("shard-duration-minutes").value) : 30;
+    
+    // Break mode
     const break_mode = document.getElementById("break-mode").checked;
     const break_video_url = document.getElementById("break-video").value.trim();
     const break_image_url = document.getElementById("break-image").value.trim();
@@ -242,7 +245,7 @@ async function saveAllSettings() {
     const outro_enabled = document.getElementById("outro-enabled").checked;
     const ending_video_url = document.getElementById("ending-video").value.trim();
     
-    // GitHub Configurations
+    // GitHub
     const git_enabled = document.getElementById("git-enabled").checked;
     const git_repo = document.getElementById("git-repo").value.trim();
     const git_branch = document.getElementById("git-branch").value.trim();
@@ -254,6 +257,8 @@ async function saveAllSettings() {
         quality,
         loop_current_video,
         budget_mode,
+        auto_shard_drive,
+        shard_duration_minutes,
         auto_ping_url,
         break_mode,
         break_video_url,
@@ -282,10 +287,10 @@ async function saveAllSettings() {
             showToast("Settings updated successfully!");
             loadConfig();
         } else {
-            showToast("Failed to save configuration settings.", "danger");
+            showToast("Failed to save settings.", "danger");
         }
     } catch (err) {
-        showToast("Error connecting to server to save settings.", "danger");
+        showToast("Error connecting to server.", "danger");
     }
 }
 
